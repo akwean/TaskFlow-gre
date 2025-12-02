@@ -34,6 +34,22 @@ const cardSchema = new mongoose.Schema({
         name: String,
         url: String,
     }],
+    checklists: [{
+        title: {
+            type: String,
+            required: true,
+        },
+        items: [{
+            text: {
+                type: String,
+                required: true,
+            },
+            completed: {
+                type: Boolean,
+                default: false,
+            },
+        }],
+    }],
 }, {
     timestamps: true,
 });

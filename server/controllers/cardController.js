@@ -43,7 +43,7 @@ const createCard = async (req, res) => {
 // @route   PUT /api/cards/:id
 // @access  Private
 const updateCard = async (req, res) => {
-    const { title, description, list, order, labels, members, dueDate } = req.body;
+    const { title, description, list, order, labels, members, dueDate, checklists } = req.body;
 
     try {
         const card = await Card.findById(req.params.id);
@@ -59,6 +59,7 @@ const updateCard = async (req, res) => {
         if (labels !== undefined) card.labels = labels;
         if (members !== undefined) card.members = members;
         if (dueDate !== undefined) card.dueDate = dueDate;
+        if (checklists !== undefined) card.checklists = checklists;
 
         await card.save();
 

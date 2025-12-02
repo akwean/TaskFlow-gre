@@ -1,8 +1,9 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Card } from '@/components/ui/card';
+import { Calendar, CheckSquare } from 'lucide-react';
 
-const CardItem = ({ card, isDragging = false }) => {
+const CardItem = ({ card, isDragging = false, onClick }) => {
     const {
         attributes,
         listeners,
@@ -18,6 +19,20 @@ const CardItem = ({ card, isDragging = false }) => {
         opacity: isSortableDragging ? 0.5 : 1,
     };
 
+    const handleClick = (e) => {
+        // Don't open modal if dragging
+        if (!isSortableDragging && onClick) {
+            onClick(card);
+        }
+    };
+
+    // Calculate checklist progress
+    const totalItems = card.checklists?.reduce((sum, cl) => sum + cl.items.length, 0) || 0;
+    const completedItems = card.checklists?.reduce(
+        (sum, cl) => sum + cl.items.filter(item => item.completed).length,
+        0
+    ) || 0;
+
     return (
         <div
             ref={setNodeRef}
@@ -26,21 +41,41 @@ const CardItem = ({ card, isDragging = false }) => {
             {...listeners}
             className={`${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         >
-            <Card className="p-3 bg-white shadow-sm hover:shadow-md transition-shadow">
-                <p className="text-sm text-gray-800">{card.title}</p>
+            <Card
+                className="p-3 bg-white shadow-sm hover:shadow-md transition-shadow"
+                onClick={handleClick}
+            >
+                <p className="text-sm text-gray-800 mb-2">{card.title}</p>
+
+                {/* Labels */}
                 {card.labels && card.labels.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
+                    <div className="flex flex-wrap gap-1 mb-2">
                         {card.labels.map((label, idx) => (
                             <span
                                 key={idx}
-                                className="px-2 py-1 text-xs rounded"
-                                style={{ backgroundColor: label.color, color: 'white' }}
-                            >
-                                {label.name}
-                            </span>
+                                className="h-2 w-10 rounded-full"
+                                style={{ backgroundColor: label.color }}
+                                title={label.name}
+                            />
                         ))}
                     </div>
                 )}
+
+                {/* Metadata */}
+                <div className="flex items-center gap-3 text-xs text-gray-600">
+                    {card.dueDate && (
+                        <div className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(card.dueDate).toLocaleDateString()}
+                        </div>
+                    )}
+                    {totalItems > 0 && (
+                        <div className="flex items-center gap-1">
+                            <CheckSquare className="w-3 h-3" />
+                            {completedItems}/{totalItems}
+                        </div>
+                    )}
+                </div>
             </Card>
         </div>
     );

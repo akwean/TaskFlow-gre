@@ -8,6 +8,8 @@ import { ArrowLeft, Plus } from 'lucide-react';
 import api from '@/lib/api';
 import ListColumn from '../components/ListColumn';
 import CardItem from '../components/CardItem';
+import CardModal from '../components/CardModal';
+import ShareBoardDialog from '../components/ShareBoardDialog';
 
 const BoardView = () => {
     const { id } = useParams();
@@ -18,6 +20,8 @@ const BoardView = () => {
     const [loading, setLoading] = useState(true);
     const [newListTitle, setNewListTitle] = useState('');
     const [activeId, setActiveId] = useState(null);
+    const [selectedCard, setSelectedCard] = useState(null);
+    const [isCardModalOpen, setIsCardModalOpen] = useState(false);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -143,6 +147,33 @@ const BoardView = () => {
         setActiveId(null);
     };
 
+    const handleCardClick = (card) => {
+        setSelectedCard(card);
+        setIsCardModalOpen(true);
+    };
+
+    const handleCardUpdate = (updatedCard, isDeleted = false) => {
+        if (isDeleted) {
+            // Remove card from state
+            const newCards = { ...cards };
+            for (const listId in newCards) {
+                newCards[listId] = newCards[listId].filter(c => c._id !== selectedCard._id);
+            }
+            setCards(newCards);
+        } else {
+            // Update card in state
+            const newCards = { ...cards };
+            for (const listId in newCards) {
+                const cardIndex = newCards[listId].findIndex(c => c._id === updatedCard._id);
+                if (cardIndex !== -1) {
+                    newCards[listId][cardIndex] = updatedCard;
+                    break;
+                }
+            }
+            setCards(newCards);
+        }
+    };
+
     if (loading) {
         return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
     }
@@ -165,6 +196,7 @@ const BoardView = () => {
                         </Button>
                         <h1 className="text-xl font-bold text-white">{board.title}</h1>
                     </div>
+                    <ShareBoardDialog board={board} onUpdate={setBoard} />
                 </div>
             </header>
 
@@ -184,6 +216,7 @@ const BoardView = () => {
                                     list={list}
                                     cards={cards[list._id] || []}
                                     onCreateCard={handleCreateCard}
+                                    onCardClick={handleCardClick}
                                 />
                             ))}
                         </SortableContext>
@@ -211,6 +244,14 @@ const BoardView = () => {
                     {activeCard ? <CardItem card={activeCard} isDragging /> : null}
                 </DragOverlay>
             </DndContext>
+
+            {/* Card Modal */}
+            <CardModal
+                card={selectedCard}
+                isOpen={isCardModalOpen}
+                onClose={() => setIsCardModalOpen(false)}
+                onUpdate={handleCardUpdate}
+            />
         </div>
     );
 };

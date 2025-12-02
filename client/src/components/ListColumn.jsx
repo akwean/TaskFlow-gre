@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Plus } from 'lucide-react';
 import CardItem from './CardItem';
 
-const ListColumn = ({ list, cards, onCreateCard }) => {
+const ListColumn = ({ list, cards, onCreateCard, onCardClick }) => {
     const [newCardTitle, setNewCardTitle] = useState('');
     const [isAddingCard, setIsAddingCard] = useState(false);
 
@@ -33,7 +33,7 @@ const ListColumn = ({ list, cards, onCreateCard }) => {
                 <div ref={setDroppableRef} className="flex-1 overflow-y-auto space-y-2 mb-2">
                     <SortableContext items={cards.map(c => c._id)} strategy={verticalListSortingStrategy}>
                         {cards.map((card) => (
-                            <CardItem key={card._id} card={card} />
+                            <CardItem key={card._id} card={card} onClick={onCardClick} />
                         ))}
                     </SortableContext>
                 </div>
