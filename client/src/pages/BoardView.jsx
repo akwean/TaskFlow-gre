@@ -1,0 +1,218 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { DndContext, DragOverlay, closestCorners, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, horizontalListSortingStrategy } from '@dnd-kit/sortable';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ArrowLeft, Plus } from 'lucide-react';
+import api from '@/lib/api';
+import ListColumn from '../components/ListColumn';
+import CardItem from '../components/CardItem';
+
+const BoardView = () => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const [board, setBoard] = useState(null);
+    const [lists, setLists] = useState([]);
+    const [cards, setCards] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [newListTitle, setNewListTitle] = useState('');
+    const [activeId, setActiveId] = useState(null);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        })
+    );
+
+    useEffect(() => {
+        fetchBoardData();
+    }, [id]);
+
+    const fetchBoardData = async () => {
+        try {
+            const [boardRes, listsRes] = await Promise.all([
+                api.get(`/boards/${id}`),
+                api.get(`/boards/${id}/lists`)
+            ]);
+
+            setBoard(boardRes.data);
+            setLists(listsRes.data);
+
+            // Fetch cards for each list
+            const cardsData = {};
+            for (const list of listsRes.data) {
+                const { data } = await api.get(`/lists/${list._id}/cards`);
+                cardsData[list._id] = data;
+            }
+            setCards(cardsData);
+            setLoading(false);
+        } catch (error) {
+            console.error(error);
+            setLoading(false);
+        }
+    };
+
+    const handleCreateList = async (e) => {
+        e.preventDefault();
+        if (!newListTitle.trim()) return;
+
+        try {
+            const { data } = await api.post(`/boards/${id}/lists`, { title: newListTitle });
+            setLists([...lists, data]);
+            setCards({ ...cards, [data._id]: [] });
+            setNewListTitle('');
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleCreateCard = async (listId, title) => {
+        try {
+            const { data } = await api.post(`/lists/${listId}/cards`, { title });
+            setCards({
+                ...cards,
+                [listId]: [...(cards[listId] || []), data]
+            });
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleDragStart = (event) => {
+        setActiveId(event.active.id);
+    };
+
+    const handleDragEnd = async (event) => {
+        const { active, over } = event;
+
+        if (!over) {
+            setActiveId(null);
+            return;
+        }
+
+        const activeId = active.id;
+        const overId = over.id;
+
+        // Find which list the active card belongs to
+        let sourceListId = null;
+        let targetListId = null;
+
+        for (const [listId, listCards] of Object.entries(cards)) {
+            if (listCards.find(c => c._id === activeId)) {
+                sourceListId = listId;
+            }
+            if (listCards.find(c => c._id === overId)) {
+                targetListId = listId;
+            }
+            // Check if dropping on a list
+            if (listId === overId) {
+                targetListId = listId;
+            }
+        }
+
+        if (!sourceListId) return;
+        if (!targetListId) targetListId = sourceListId;
+
+        // Move card between lists or reorder
+        if (sourceListId !== targetListId) {
+            const sourceCards = [...cards[sourceListId]];
+            const targetCards = [...cards[targetListId]];
+
+            const cardIndex = sourceCards.findIndex(c => c._id === activeId);
+            const [movedCard] = sourceCards.splice(cardIndex, 1);
+
+            targetCards.push(movedCard);
+
+            setCards({
+                ...cards,
+                [sourceListId]: sourceCards,
+                [targetListId]: targetCards
+            });
+
+            // Update on server
+            try {
+                await api.put(`/cards/${activeId}`, { list: targetListId });
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        setActiveId(null);
+    };
+
+    if (loading) {
+        return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    }
+
+    if (!board) {
+        return <div className="flex items-center justify-center min-h-screen">Board not found</div>;
+    }
+
+    const activeCard = activeId ? Object.values(cards).flat().find(c => c._id === activeId) : null;
+
+    return (
+        <div className="min-h-screen" style={{ backgroundColor: board.background }}>
+            {/* Header */}
+            <header className="bg-black bg-opacity-20 backdrop-blur-sm border-b border-white border-opacity-20">
+                <div className="px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        <Button onClick={() => navigate('/')} variant="ghost" size="sm" className="text-white hover:bg-white hover:bg-opacity-20">
+                            <ArrowLeft className="w-4 h-4 mr-2" />
+                            Back
+                        </Button>
+                        <h1 className="text-xl font-bold text-white">{board.title}</h1>
+                    </div>
+                </div>
+            </header>
+
+            {/* Board Content */}
+            <DndContext
+                sensors={sensors}
+                collisionDetection={closestCorners}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+            >
+                <div className="p-4 overflow-x-auto">
+                    <div className="flex space-x-4 min-h-[calc(100vh-120px)]">
+                        <SortableContext items={lists.map(l => l._id)} strategy={horizontalListSortingStrategy}>
+                            {lists.map((list) => (
+                                <ListColumn
+                                    key={list._id}
+                                    list={list}
+                                    cards={cards[list._id] || []}
+                                    onCreateCard={handleCreateCard}
+                                />
+                            ))}
+                        </SortableContext>
+
+                        {/* Add List Form */}
+                        <div className="flex-shrink-0 w-72">
+                            <form onSubmit={handleCreateList} className="bg-white bg-opacity-90 rounded-lg p-3">
+                                <Input
+                                    type="text"
+                                    value={newListTitle}
+                                    onChange={(e) => setNewListTitle(e.target.value)}
+                                    placeholder="Enter list title..."
+                                    className="mb-2"
+                                />
+                                <Button type="submit" size="sm" className="w-full">
+                                    <Plus className="w-4 h-4 mr-2" />
+                                    Add List
+                                </Button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <DragOverlay>
+                    {activeCard ? <CardItem card={activeCard} isDragging /> : null}
+                </DragOverlay>
+            </DndContext>
+        </div>
+    );
+};
+
+export default BoardView;
