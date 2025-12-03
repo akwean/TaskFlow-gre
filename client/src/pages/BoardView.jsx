@@ -179,6 +179,27 @@ const BoardView = () => {
         }
     };
 
+    const handleUpdateList = async (listId, title) => {
+        try {
+            const { data } = await api.put(`/lists/${listId}`, { title });
+            setLists(lists.map(l => l._id === listId ? data : l));
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleDeleteList = async (listId) => {
+        try {
+            await api.delete(`/lists/${listId}`);
+            setLists(lists.filter(l => l._id !== listId));
+            const newCards = { ...cards };
+            delete newCards[listId];
+            setCards(newCards);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     const handleSaveTitle = async () => {
         if (editingTitle.trim() === board.title) {
             setIsEditingTitle(false);
@@ -263,6 +284,8 @@ const BoardView = () => {
                                     cards={cards[list._id] || []}
                                     onCreateCard={handleCreateCard}
                                     onCardClick={handleCardClick}
+                                    onUpdateList={handleUpdateList}
+                                    onDeleteList={handleDeleteList}
                                 />
                             ))}
                         </SortableContext>

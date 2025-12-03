@@ -1,16 +1,36 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus } from 'lucide-react';
+import { Plus, MoreVertical } from 'lucide-react';
 import CardItem from './CardItem';
 
-const ListColumn = ({ list, cards, onCreateCard, onCardClick }) => {
+const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDeleteList }) => {
     const [newCardTitle, setNewCardTitle] = useState('');
     const [isAddingCard, setIsAddingCard] = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
+    const [editingTitle, setEditingTitle] = useState(list.title);
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (menuRef.current && !menuRef.current.contains(event.target)) {
+                setShowMenu(false);
+            }
+        };
+
+        if (showMenu) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showMenu]);
 
     const { setNodeRef: setDroppableRef } = useDroppable({
         id: list._id,
@@ -25,10 +45,77 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick }) => {
         setIsAddingCard(false);
     };
 
+    const handleSaveTitle = async () => {
+        if (editingTitle.trim() === list.title) {
+            setIsEditingTitle(false);
+            return;
+        }
+
+        try {
+            await onUpdateList(list._id, editingTitle.trim());
+            setIsEditingTitle(false);
+        } catch (error) {
+            console.error(error);
+            setEditingTitle(list.title);
+            setIsEditingTitle(false);
+        }
+    };
+
     return (
         <div className="flex-shrink-0 w-72">
             <div className="bg-gray-100 rounded-lg p-3 max-h-[calc(100vh-140px)] flex flex-col">
-                <h3 className="font-semibold text-gray-800 mb-3 px-2">{list.title}</h3>
+                <div className="flex items-center justify-between mb-3 px-2">
+                    {isEditingTitle ? (
+                        <Input
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onBlur={handleSaveTitle}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveTitle();
+                                if (e.key === 'Escape') {
+                                    setEditingTitle(list.title);
+                                    setIsEditingTitle(false);
+                                }
+                            }}
+                            className="font-semibold text-gray-800 bg-transparent border-none outline-none p-0 h-auto text-sm"
+                            autoFocus
+                        />
+                    ) : (
+                        <h3 className="font-semibold text-gray-800 cursor-pointer flex-1" onClick={() => setIsEditingTitle(true)}>{list.title}</h3>
+                    )}
+                    <div className="relative">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowMenu(!showMenu)}
+                            className="h-6 w-6 p-0"
+                        >
+                            <MoreVertical className="w-4 h-4" />
+                        </Button>
+                        {showMenu && (
+                            <div ref={menuRef} className="absolute right-0 top-6 bg-white border border-gray-200 rounded-md shadow-lg z-10 w-32">
+                                <button
+                                    onClick={() => {
+                                        setIsEditingTitle(true);
+                                        setShowMenu(false);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                                >
+                                    Rename
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        onDeleteList(list._id);
+                                        setShowMenu(false);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 text-red-600"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
 
                 <div ref={setDroppableRef} className="flex-1 overflow-y-auto space-y-2 mb-2">
                     <SortableContext items={cards.map(c => c._id)} strategy={verticalListSortingStrategy}>
