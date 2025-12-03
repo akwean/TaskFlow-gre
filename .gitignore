@@ -25,8 +25,8 @@ out/
 
 # Tailwind CSS
 # Ignore generated CSS if you build it separately
-*.css
-*.css.map
+#*.css
+#*.css.map
 
 # Logs
 logs
