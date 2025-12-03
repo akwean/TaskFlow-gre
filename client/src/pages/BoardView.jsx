@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DndContext, DragOverlay, closestCorners, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, horizontalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Plus } from 'lucide-react';
 import api from '@/lib/api';
+import { useAuth } from '../context/AuthContext';
 import ListColumn from '../components/ListColumn';
 import CardItem from '../components/CardItem';
 import CardModal from '../components/CardModal';
@@ -14,6 +15,7 @@ import ShareBoardDialog from '../components/ShareBoardDialog';
 const BoardView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [board, setBoard] = useState(null);
     const [lists, setLists] = useState([]);
     const [cards, setCards] = useState({});
@@ -22,6 +24,8 @@ const BoardView = () => {
     const [activeId, setActiveId] = useState(null);
     const [selectedCard, setSelectedCard] = useState(null);
     const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
+    const [editingTitle, setEditingTitle] = useState('');
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -44,6 +48,7 @@ const BoardView = () => {
 
             setBoard(boardRes.data);
             setLists(listsRes.data);
+            setEditingTitle(boardRes.data.title);
 
             // Fetch cards for each list
             const cardsData = {};
@@ -174,6 +179,24 @@ const BoardView = () => {
         }
     };
 
+    const handleSaveTitle = async () => {
+        if (editingTitle.trim() === board.title) {
+            setIsEditingTitle(false);
+            return;
+        }
+
+        try {
+            const { data } = await api.put(`/boards/${id}`, { title: editingTitle.trim() });
+            setBoard(data);
+            setEditingTitle(data.title);
+            setIsEditingTitle(false);
+        } catch (error) {
+            console.error(error);
+            setEditingTitle(board.title);
+            setIsEditingTitle(false);
+        }
+    };
+
     if (loading) {
         return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
     }
@@ -183,6 +206,8 @@ const BoardView = () => {
     }
 
     const activeCard = activeId ? Object.values(cards).flat().find(c => c._id === activeId) : null;
+
+    const canEdit = user && (board.owner._id === user._id || board.members.some(m => m.user._id === user._id && m.role === 'admin'));
 
     return (
         <div className="min-h-screen" style={{ backgroundColor: board.background }}>
@@ -194,7 +219,28 @@ const BoardView = () => {
                             <ArrowLeft className="w-4 h-4 mr-2" />
                             Back
                         </Button>
-                        <h1 className="text-xl font-bold text-white">{board.title}</h1>
+                        {canEdit ? (
+                            isEditingTitle ? (
+                                <Input
+                                    value={editingTitle}
+                                    onChange={(e) => setEditingTitle(e.target.value)}
+                                    onBlur={handleSaveTitle}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveTitle();
+                                        if (e.key === 'Escape') {
+                                            setEditingTitle(board.title);
+                                            setIsEditingTitle(false);
+                                        }
+                                    }}
+                                    className="text-xl font-bold text-white bg-transparent border-none outline-none p-0 h-auto"
+                                    autoFocus
+                                />
+                            ) : (
+                                <h1 className="text-xl font-bold text-white cursor-pointer" onClick={() => setIsEditingTitle(true)}>{board.title}</h1>
+                            )
+                        ) : (
+                            <h1 className="text-xl font-bold text-white">{board.title}</h1>
+                        )}
                     </div>
                     <ShareBoardDialog board={board} onUpdate={setBoard} />
                 </div>
