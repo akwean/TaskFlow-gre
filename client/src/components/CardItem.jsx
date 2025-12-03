@@ -45,7 +45,7 @@ const CardItem = ({ card, isDragging = false, onClick }) => {
                 className="p-3 bg-white shadow-sm hover:shadow-md transition-shadow"
                 onClick={handleClick}
             >
-                <p className="text-sm text-gray-800 mb-2">{card.title}</p>
+                <p className="text-sm text-gray-800 mb-2 truncate" title={card.title}>{card.title}</p>
 
                 {/* Labels */}
                 {card.labels && card.labels.length > 0 && (
