@@ -1,93 +1,145 @@
-# TaskFlow AI Coding Guidelines
+# Copilot Instructions for TaskFlow
 
-## Architecture Overview
-TaskFlow is a full-stack Kanban board application similar to Trello, built with:
-- **Frontend**: React 19 + Vite, Tailwind CSS, Radix UI components, @dnd-kit for drag-and-drop
-- **Backend**: Node.js + Express, MongoDB with Mongoose, JWT authentication
-- **Data Model**: User → Board (with members/roles) → List (columns) → Card (tasks with labels, checklists, attachments)
+Welcome to the TaskFlow codebase! This document provides essential guidance for AI coding agents to be productive in this project. TaskFlow is a full-stack Kanban board application built with React, Node.js, Express, and MongoDB.
 
-## Key Patterns & Conventions
+## Project Overview
 
-### API Communication
-- Use `axios` instance from `client/src/lib/api.js` with automatic JWT token injection
-- Base URL: `http://localhost:5000/api`
-- Example: `api.get('/boards/${boardId}/lists')` for fetching board lists
+### Architecture
+- **Frontend (Client):**
+  - Built with React 19, Vite, and Tailwind CSS.
+  - Located in the `client/` directory.
+  - Key components:
+    - `src/components/`: Reusable UI components (e.g., `CardItem`, `CardModal`).
+    - `src/pages/`: Page-level components (e.g., `Dashboard`, `BoardView`).
+    - `src/context/AuthContext.jsx`: Manages user authentication state.
+  - Styling:
+    - Tailwind CSS for utility-first styling.
+    - `src/index.css` and `src/App.css` for global styles.
 
-### Authentication & State Management
-- Auth via `AuthContext` (`client/src/context/AuthContext.jsx`)
-- User state: `{ user, login, register, logout, loading }`
-- Protect routes with `<PrivateRoute>` component in `App.jsx`
-- Token stored in `localStorage` as 'token'
+- **Backend (Server):**
+  - Built with Node.js, Express, and MongoDB.
+  - Located in the `server/` directory.
+  - Key modules:
+    - `routes/`: API endpoints (e.g., `auth.js`, `boards.js`).
+    - `controllers/`: Business logic for routes (e.g., `authController.js`).
+    - `models/`: Mongoose models for MongoDB (e.g., `User.js`, `Board.js`).
+    - `middleware/`: Middleware functions (e.g., `authMiddleware.js`).
 
-### Component Structure
-- Pages in `client/src/pages/` (Dashboard, BoardView, Login, Register)
-- Reusable components in `client/src/components/` (ListColumn, CardItem, CardModal)
-- UI primitives in `client/src/components/ui/` (button, input, dialog via Radix)
-- Import path aliases: `@/` maps to `src/` (configured in `vite.config.js`)
+### Data Flow
+- **Frontend:**
+  - State management is handled locally using React Context (e.g., `AuthContext`).
+  - API calls are made via `lib/api.js`.
+- **Backend:**
+  - RESTful API design.
+  - MongoDB is used for persistent storage, with Mongoose for schema definitions.
 
-### Drag & Drop Implementation
-- Use `@dnd-kit/core` with `DndContext`, `SortableContext`, `useSortable`, `useDroppable`
-- Cards are draggable between lists; implement in `BoardView.jsx` with `handleDragEnd`
-- Example: Move card between lists by updating `card.list` via `api.put('/cards/${cardId}', { list: newListId })`
+## Developer Workflows
 
-### Data Fetching & State Updates
-- Fetch related data in parallel: `Promise.all([api.get('/boards'), api.get('/lists')])`
-- Update local state optimistically, then sync with server
-- Example in `BoardView.jsx`: After creating card, update `cards` state immediately
+### Setting Up the Project
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/akwean/TaskFlow-gre.git
+   cd TaskFlow-gre
+   ```
+2. Set up the server:
+   ```bash
+   cd server
+   npm install
+   ```
+   Create a `.env` file with:
+   ```
+   MONGO_URI=mongodb://localhost:27017/taskflow
+   JWT_SECRET=your_jwt_secret_here
+   PORT=5000
+   ```
+3. Set up the client:
+   ```bash
+   cd ../client
+   npm install
+   ```
 
-### Backend Patterns
-- Controllers in `server/controllers/` with JSDoc comments for routes/access
-- Models in `server/models/` with Mongoose schemas and pre-save hooks (e.g., password hashing in User.js)
-- Middleware: `authMiddleware.js` for JWT verification, populates `req.user`
-- Access control: Check `req.user._id` against owner/members with roles
+### Running the Application
+- Start the server:
+  ```bash
+  cd server
+  npm run dev
+  ```
+- Start the client:
+  ```bash
+  cd client
+  npm run dev
+  ```
+- Open the app at `http://localhost:5173`.
 
-### Database Relationships
-- Boards have owner + members array with roles ('admin', 'member')
-- Lists belong to boards, ordered by `order` field
-- Cards belong to lists, ordered by `order` field
-- Use `populate()` for joining: `Board.find().populate('owner', 'username email avatar')`
+### Testing
+- **Backend:** Add tests in `server/tests/` (not yet implemented).
+- **Frontend:** Add tests in `client/src/__tests__/` (not yet implemented).
 
-## Development Workflow
-1. **Setup**: Install dependencies in both `client/` and `server/` with `npm install`
-2. **Database**: Set `MONGO_URI` in `server/.env` (e.g., `mongodb://localhost:27017/taskflow`)
-3. **Run**: `npm run dev` in `server/` (port 5000), then `npm run dev` in `client/` (port 5173)
-4. **Build**: `npm run build` in `client/` for production bundle
+### Debugging
+- Use `console.log` for quick debugging.
+- For the backend, use `nodemon` for live reloads.
+- For the frontend, use Vite's hot module replacement (HMR).
 
-## Common Tasks
-- **Add new card field**: Update `Card.js` model, then `CardModal.jsx` form and display components
-- **New API endpoint**: Add route in `server/routes/`, controller in `controllers/`, update client API calls
-- **UI component**: Use Tailwind classes + Radix primitives, follow existing patterns in `components/ui/`
-- **Drag enhancement**: Extend `handleDragEnd` in `BoardView.jsx` for reordering within lists (update `order` field)
+## Project-Specific Conventions
 
-## Environment & Deployment
-- Environment variables in `server/.env`: `MONGO_URI`, `JWT_SECRET`, `PORT`
-- CORS enabled for client development
-- Production: Build client, serve static files from Express
+### Frontend
+- **Component Structure:**
+  - Use functional components with hooks.
+  - Place reusable components in `src/components/`.
+  - Group related components in subdirectories (e.g., `ui/` for low-level UI components).
+- **Styling:**
+  - Use Tailwind CSS classes directly in JSX.
+  - Avoid inline styles unless necessary.
 
-# Custom Instructions: Frontend UI/UX and Consistency Agent
+### Backend
+- **Routing:**
+  - Define routes in `routes/`.
+  - Use controllers in `controllers/` to separate business logic.
+- **Error Handling:**
+  - Use `next(err)` to pass errors to Express's error handler.
 
-## 1. Core Focus: User Interface and Experience (UI/UX)
-* **PRIORITY ONE:** When suggesting code or changes, focus overwhelmingly on the **frontend (UI) code** first.
-* **AESTHETICS:** All new components must adhere to the **Atomic Design** pattern and use the project's existing CSS/Tailwind utility classes for styling. Do not introduce new, custom colors or fonts unless explicitly requested.
-* **CONSISTENCY:** Reference and reuse existing structural components (e.g., `Button`, `Card`, `InputField`) before attempting to write new ones.
-* **RESPONSIVENESS:** All components must be inherently responsive. Assume a mobile-first approach unless the user explicitly specifies a desktop-only design.
-* **ACCESSIBILITY:** Ensure all interactive elements include proper ARIA attributes, semantic HTML (e.g., `<button>` instead of `<div>` with click handler), and keyboard navigation support.
+## Integration Points
+- **Frontend to Backend Communication:**
+  - API calls are centralized in `client/src/lib/api.js`.
+- **Authentication:**
+  - JWT-based authentication.
+  - `AuthContext` manages the auth state on the frontend.
+  - `authMiddleware.js` protects routes on the backend.
 
-## 2. Safety and Non-Destructive Editing (CRITICAL)
-* **THE GOLDEN RULE:** **NEVER DELETE or REMOVE** existing code blocks, functions, or imports unless the user specifically and clearly commands, "Delete X" or "Remove Y."
-* **DO NOT RE-FACTOR IMPORTS:** If adding a function to a file, add new imports below existing ones. Do not rearrange, combine, or re-factor the import statements of an existing file.
-* **USE COMMENTS FOR STUBS:** If a function or logic is outside the current request's scope (e.g., a backend call), use a simple, descriptive comment placeholder (e.g., `// TODO: Implement backend API call here`) instead of attempting to generate complex or unnecessary code.
-* **REVIEW BEFORE EDIT:** Before performing an edit that touches an existing function body, you must briefly state in a comment or plan: `// CHECKING: Ensuring existing logic is preserved and extended.`
+## External Dependencies
+- **Frontend:**
+  - `@dnd-kit`: Drag-and-drop functionality.
+  - `Radix UI`: Accessible UI components.
+- **Backend:**
+  - `mongoose`: MongoDB object modeling.
+  - `jsonwebtoken`: JWT handling.
 
-## 3. Consistency (Frontend/Backend Contract)
-* **DATA PARITY:** Use `camelCase` for all API request and response fields. If the backend uses `snake_case` (e.g., `user_id`), the frontend interface must define it as `userId`.
-* **TYPE CHECKING:** If the project uses TypeScript, all responses must include the new or updated interfaces/types that match the proposed code change. Do not propose code without the corresponding type definition.
+## Examples
+
+### Adding a New API Endpoint
+1. Create a new route in `server/routes/` (e.g., `tasks.js`).
+2. Add the corresponding controller in `server/controllers/`.
+3. Update the frontend API calls in `client/src/lib/api.js`.
+
+### Creating a New Component
+1. Add the component in `client/src/components/`.
+2. Import and use it in the relevant page (e.g., `Dashboard.jsx`).
+3. Style it using Tailwind CSS.
 
 ---
 
-### How to Use This Agent Effectively
+## AI Editing Safeguards
 
-1.  **Create the File:** Save the content above as **`.github/copilot-instructions.md`** in your repository's root directory.
-2.  **Explicitly Reference Consistency:** When you start a chat, remind Copilot of your priority by referencing the file. For example:
-    * **Prompt:** "Based on our custom instructions, create a new `UserProfile` component that displays the user's name and bio."
-3.  **Monitor the Output:** Since you've added safety rules (Section 2), pay attention to how Copilot implements them—it should now be highly defensive about touching existing code.
+To preserve code integrity and prevent destructive edits, all AI agents must follow these rules when modifying the TaskFlow codebase:
+
+- Do not overwrite existing logic unless explicitly instructed. Always wrap new logic in conditionals or modular functions to avoid breaking current behavior.
+- Preserve component signatures and props. Avoid renaming or restructuring unless the change is scoped and justified.
+- Avoid mass refactors. Large-scale changes (e.g., file renames, directory restructuring) must be proposed first via comments or PR notes.
+- Respect Tailwind and Radix UI conventions. Do not replace utility classes or component structures with custom styles unless requested.
+- Never delete files, routes, or models. Use comments to suggest deprecation or alternatives.
+- Frontend edits must preserve HMR compatibility. Avoid changes that break Vite’s hot reload unless necessary.
+- Backend edits must preserve Express middleware chains and Mongoose schema integrity.
+
+If unsure, prefer commenting suggestions over direct edits. When in doubt, ask for clarification before proceeding.
+
+For questions or contributions, refer to the `README.md` or open an issue in the repository.

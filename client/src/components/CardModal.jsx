@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,6 +35,8 @@ const CardModal = ({ card, isOpen, onClose, onUpdate }) => {
     const isMounted = useRef(true);
     const [isSaving, setIsSaving] = useState(false);
     const [lastSavedAt, setLastSavedAt] = useState(null);
+    const titleInputRef = useRef(null);
+    const descriptionRef = useRef(null);
 
     const debouncedUpdate = useCallback(async () => {
         if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
@@ -101,10 +103,18 @@ const CardModal = ({ card, isOpen, onClose, onUpdate }) => {
     }, []);
 
     useEffect(() => {
-        if (card && isOpen) {
-            debouncedUpdate();
+        // Prevent auto-focus on the title input by shifting focus to a hidden div
+        const focusableElement = document.getElementById('focus-trap');
+        if (focusableElement) {
+            focusableElement.focus();
         }
-    }, [debouncedUpdate, card, isOpen]);
+    }, []);
+
+    useEffect(() => {
+        if (isOpen && titleInputRef.current) {
+            setTimeout(() => titleInputRef.current?.blur(), 0);
+        }
+    }, [isOpen]);
 
     const flushUpdate = async () => {
         if (debounceTimeout.current) {
@@ -214,15 +224,33 @@ const CardModal = ({ card, isOpen, onClose, onUpdate }) => {
 
     return (
         <Dialog open={isOpen} onOpenChange={handleDialogOpenChange}>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div id="focus-trap" tabIndex="-1" className="hidden" /> {/* Hidden focus trap */}
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto"
+                onOpenAutoFocus={(event) => {
+                    event.preventDefault(); // stops Radix from auto-focusing
+                    const descriptionElement = document.getElementById('description');
+                    if (descriptionElement) {
+                        descriptionElement.focus(); // manually set focus to the description
+                    }
+                }}
+            >
                 <DialogHeader>
                     <DialogTitle>
                         <Input
+                            ref={titleInputRef}
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
                             className="text-xl font-semibold border-none px-0 focus-visible:ring-0 max-w-lg"
+                            autoFocus={false} // Prevent auto-focus when the modal opens
+                            onFocus={(e) => e.target.select()} // Ensure the text is selectable only when manually focused
+                            id="card-title"
+                            name="title"
+                            aria-label="Card Title"
                         />
                     </DialogTitle>
+                    <DialogDescription>
+                        Edit the details of this card.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-6">
@@ -275,7 +303,7 @@ const CardModal = ({ card, isOpen, onClose, onUpdate }) => {
 
                     {/* Due Date */}
                     <div>
-                        <Label className="flex items-center gap-2 mb-2">
+                        <Label htmlFor="due-date" className="flex items-center gap-2 mb-2">
                             <Calendar className="w-4 h-4" />
                             Due Date
                         </Label>
@@ -284,18 +312,23 @@ const CardModal = ({ card, isOpen, onClose, onUpdate }) => {
                             value={dueDate}
                             onChange={(e) => setDueDate(e.target.value)}
                             className="max-w-xs"
+                            id="due-date"
+                            name="dueDate"
                         />
                     </div>
 
                     {/* Description */}
                     <div>
-                        <Label className="mb-2 block">Description</Label>
+                        <Label htmlFor="description" className="mb-2 block">Description</Label>
                         <Textarea
+                            ref={descriptionRef}
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             placeholder="Add a more detailed description..."
                             rows={4}
                             className="w-full max-w-2xl"
+                            id="description"
+                            name="description"
                         />
                     </div>
 
@@ -324,6 +357,8 @@ const CardModal = ({ card, isOpen, onClose, onUpdate }) => {
                                     placeholder="Checklist title..."
                                     onKeyPress={(e) => e.key === 'Enter' && addChecklist()}
                                     className="max-w-md"
+                                    id="new-checklist-title"
+                                    name="newChecklistTitle"
                                 />
                                 <Button onClick={addChecklist} size="sm">Add</Button>
                                 <Button onClick={() => setShowNewChecklist(false)} size="sm" variant="ghost">
@@ -351,10 +386,7 @@ const CardModal = ({ card, isOpen, onClose, onUpdate }) => {
                             <Trash2 className="w-4 h-4 mr-2" />
                             Delete Card
                         </Button>
-                        <div className="flex items-center gap-3">
-                            <span className="text-sm text-gray-500">{isSaving ? 'Saving...' : lastSavedAt ? 'Saved' : ''}</span>
-                            <Button variant="outline" onClick={async () => { await flushUpdate(); onClose(); }}>Close</Button>
-                        </div>
+                        <span className="text-sm text-gray-500">{isSaving ? 'Saving...' : lastSavedAt ? 'Saved' : ''}</span>
                     </div>
                 </div>
             </DialogContent>
@@ -444,6 +476,8 @@ const ChecklistSection = ({
                         onKeyPress={(e) => e.key === 'Enter' && handleAddItem()}
                         autoFocus
                         className="max-w-xl"
+                        id={`new-item-${checklistIndex}`}
+                        name={`newItem-${checklistIndex}`}
                     />
                     <Button onClick={handleAddItem} size="sm">Add</Button>
                     <Button onClick={() => setShowAddItem(false)} size="sm" variant="ghost">
