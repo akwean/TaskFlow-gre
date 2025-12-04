@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DndContext, DragOverlay, closestCorners, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { ArrowLeft, Plus, MoreHorizontal, Trash2 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuth } from '../context/AuthContext';
 import ListColumn from '../components/ListColumn';
@@ -26,6 +27,9 @@ const BoardView = () => {
     const [isCardModalOpen, setIsCardModalOpen] = useState(false);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editingTitle, setEditingTitle] = useState('');
+    const [showMenu, setShowMenu] = useState(false);
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const menuRef = useRef(null);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -38,6 +42,19 @@ const BoardView = () => {
     useEffect(() => {
         fetchBoardData();
     }, [id]);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (menuRef.current && !menuRef.current.contains(event.target)) {
+                setShowMenu(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
 
     const fetchBoardData = async () => {
         try {
@@ -54,7 +71,8 @@ const BoardView = () => {
             const cardsData = {};
             for (const list of listsRes.data) {
                 const { data } = await api.get(`/lists/${list._id}/cards`);
-                cardsData[list._id] = data;
+                // Sort cards by order
+                cardsData[list._id] = data.sort((a, b) => a.order - b.order);
             }
             setCards(cardsData);
             setLoading(false);
@@ -83,7 +101,7 @@ const BoardView = () => {
             const { data } = await api.post(`/lists/${listId}/cards`, { title });
             setCards({
                 ...cards,
-                [listId]: [...(cards[listId] || []), data]
+                [listId]: [...(cards[listId] || []), data].sort((a, b) => a.order - b.order)
             });
         } catch (error) {
             console.error(error);
@@ -125,27 +143,79 @@ const BoardView = () => {
         if (!sourceListId) return;
         if (!targetListId) targetListId = sourceListId;
 
-        // Move card between lists or reorder
+        const sourceCards = [...cards[sourceListId]];
+        const targetCards = [...cards[targetListId]];
+
+        const activeIndex = sourceCards.findIndex(c => c._id === activeId);
+        const overIndex = targetCards.findIndex(c => c._id === overId);
+
+        // Determine drop position relative to the target card
+        const isBelow = event.delta.y > 0; // Check if dragging downwards
+        const newIndex = isBelow ? overIndex + 1 : overIndex;
+
+        // Move card between lists or reorder within same list
         if (sourceListId !== targetListId) {
-            const sourceCards = [...cards[sourceListId]];
-            const targetCards = [...cards[targetListId]];
+            // Moving between lists
+            const [movedCard] = sourceCards.splice(activeIndex, 1);
+            targetCards.splice(newIndex, 0, movedCard);
 
-            const cardIndex = sourceCards.findIndex(c => c._id === activeId);
-            const [movedCard] = sourceCards.splice(cardIndex, 1);
-
-            targetCards.push(movedCard);
+            // Update orders for target list
+            const updatedTargetCards = targetCards.map((card, index) => ({
+                ...card,
+                order: index
+            }));
 
             setCards({
                 ...cards,
                 [sourceListId]: sourceCards,
-                [targetListId]: targetCards
+                [targetListId]: updatedTargetCards
             });
 
             // Update on server
             try {
-                await api.put(`/cards/${activeId}`, { list: targetListId });
+                await api.put(`/cards/${activeId}`, { list: targetListId, order: newIndex });
+                // Update orders for remaining cards in target list
+                for (let i = newIndex + 1; i < updatedTargetCards.length; i++) {
+                    await api.put(`/cards/${updatedTargetCards[i]._id}`, { order: i });
+                }
             } catch (error) {
                 console.error(error);
+                // Revert on error
+                fetchBoardData();
+            }
+        } else {
+            // Reordering within same list
+            const oldIndex = activeIndex;
+
+            if (oldIndex !== newIndex) {
+                const [movedCard] = sourceCards.splice(oldIndex, 1);
+                sourceCards.splice(newIndex, 0, movedCard);
+
+                // Update orders
+                const updatedCards = sourceCards.map((card, index) => ({
+                    ...card,
+                    order: index
+                }));
+
+                setCards({
+                    ...cards,
+                    [sourceListId]: updatedCards
+                });
+
+                // Update on server
+                try {
+                    await api.put(`/cards/${activeId}`, { order: newIndex });
+                    // Update orders for affected cards
+                    for (let i = Math.min(oldIndex, newIndex); i <= Math.max(oldIndex, newIndex); i++) {
+                        if (i !== newIndex) {
+                            await api.put(`/cards/${updatedCards[i]._id}`, { order: i });
+                        }
+                    }
+                } catch (error) {
+                    console.error(error);
+                    // Revert on error
+                    fetchBoardData();
+                }
             }
         }
 
@@ -218,6 +288,15 @@ const BoardView = () => {
         }
     };
 
+    const handleDeleteBoard = async () => {
+        try {
+            await api.delete(`/boards/${id}`);
+            navigate('/');
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     if (loading) {
         return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
     }
@@ -263,7 +342,37 @@ const BoardView = () => {
                             <h1 className="text-xl font-bold text-white">{board.title}</h1>
                         )}
                     </div>
-                    <ShareBoardDialog board={board} onUpdate={setBoard} />
+                    <div className="flex items-center space-x-2">
+                        {canEdit && (
+                            <div className="relative" ref={menuRef}>
+                                <Button
+                                    onClick={() => setShowMenu(!showMenu)}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-white hover:bg-white hover:bg-opacity-20"
+                                >
+                                    <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                                {showMenu && (
+                                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-50">
+                                        <div className="py-1">
+                                            <button
+                                                onClick={() => {
+                                                    setShowMenu(false);
+                                                    setShowDeleteDialog(true);
+                                                }}
+                                                className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                                            >
+                                                <Trash2 className="w-4 h-4 mr-2" />
+                                                Move to Trash
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        <ShareBoardDialog board={board} onUpdate={setBoard} />
+                    </div>
                 </div>
             </header>
 
@@ -321,6 +430,26 @@ const BoardView = () => {
                 onClose={() => setIsCardModalOpen(false)}
                 onUpdate={handleCardUpdate}
             />
+
+            {/* Delete Board Confirmation Dialog */}
+            <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Move Board to Trash</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to move "{board?.title}" to trash? This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+                            Cancel
+                        </Button>
+                        <Button variant="destructive" onClick={handleDeleteBoard}>
+                            Move to Trash
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };
