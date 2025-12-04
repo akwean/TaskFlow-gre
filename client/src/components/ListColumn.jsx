@@ -5,7 +5,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, MoreVertical } from 'lucide-react';
+import { Plus, MoreVertical, GripVertical } from 'lucide-react';
 import CardItem from './CardItem';
 
 const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDeleteList, onListFocus, listPresenceCount = 0 }) => {
@@ -33,9 +33,22 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
         };
     }, [showMenu]);
 
-    const { setNodeRef: setDroppableRef } = useDroppable({
-        id: list._id,
-    });
+    const { setNodeRef: setDroppableRef } = useDroppable({ id: list._id });
+    const { setNodeRef: setEndRef, isOver: isOverEnd } = useDroppable({ id: `${list._id}__end` });
+
+    // Make the entire list sortable (drag to reorder lists)
+    const {
+        attributes,
+        listeners,
+        setNodeRef: setSortableRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: list._id });
+    const style = {
+        transform: transform ? CSS.Transform.toString(transform) : undefined,
+        transition,
+    };
 
     const handleAddCard = async (e) => {
         e.preventDefault();
@@ -63,7 +76,7 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
     };
 
     return (
-           <div className="flex-shrink-0 w-64 sm:w-72"
+           <div ref={setSortableRef} style={style} className={`flex-shrink-0 w-64 sm:w-72 ${isDragging ? 'opacity-90' : ''}`}
                onMouseEnter={() => { if (!hoveredRef.current) { hoveredRef.current = true; onListFocus?.(list._id, true); } }}
                onMouseLeave={() => { if (hoveredRef.current) { hoveredRef.current = false; onListFocus?.(list._id, false); } }}>
             <div className="bg-gray-100 rounded-lg p-2 sm:p-3 max-h-[calc(100vh-140px)] flex flex-col">
@@ -84,7 +97,17 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
                             autoFocus
                         />
                     ) : (
-                        <h3 className="font-semibold text-gray-800 cursor-pointer flex-1 text-sm sm:text-base" onClick={() => setIsEditingTitle(true)}>{list.title}</h3>
+                        <h3 className="font-semibold text-gray-800 flex items-center gap-2 flex-1 text-sm sm:text-base">
+                            <button
+                                className="text-gray-500 hover:text-gray-700 cursor-grab active:cursor-grabbing"
+                                title="Drag list"
+                                {...attributes}
+                                {...listeners}
+                            >
+                                <GripVertical className="w-4 h-4" />
+                            </button>
+                            <span className="cursor-pointer" onClick={() => setIsEditingTitle(true)}>{list.title}</span>
+                        </h3>
                     )}
                     <div className="relative flex items-center gap-2">
                         {listPresenceCount > 0 && (
@@ -131,6 +154,11 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
                             <CardItem key={card._id} card={card} onClick={onCardClick} />
                         ))}
                     </SortableContext>
+                    {/* Bottom drop target to allow placing at the end explicitly */}
+                    <div
+                        ref={setEndRef}
+                        className={`h-8 mt-1 rounded-md border border-dashed ${isOverEnd ? 'border-blue-400 bg-blue-50' : 'border-transparent'}`}
+                    />
                 </div>
 
                 {isAddingCard ? (

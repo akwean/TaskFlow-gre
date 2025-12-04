@@ -100,3 +100,30 @@ module.exports = {
     updateList,
     deleteList,
 };
+
+// @desc    Reorder lists in bulk
+// @route   POST /api/boards/:boardId/lists/reorder
+// @access  Private
+module.exports.reorderLists = async (req, res) => {
+    const { order } = req.body; // [{id, order}]
+    try {
+        if (!Array.isArray(order)) {
+            return res.status(400).json({ message: 'Invalid order payload' });
+        }
+        const ops = order.map((o) => ({
+            updateOne: {
+                filter: { _id: o.id, board: req.params.boardId },
+                update: { $set: { order: o.order } },
+            },
+        }));
+        if (ops.length > 0) {
+            await List.bulkWrite(ops);
+        }
+        const lists = await List.find({ board: req.params.boardId }).sort('order').lean();
+        emitToBoard(req.params.boardId, 'lists:reordered', { lists });
+        res.json({ success: true });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};

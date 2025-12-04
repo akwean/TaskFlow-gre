@@ -5,6 +5,7 @@ const {
     createList,
     updateList,
     deleteList,
+    reorderLists,
 } = require('../controllers/listController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -12,6 +13,9 @@ const { protect } = require('../middleware/authMiddleware');
 router.route('/')
     .get(protect, getLists)
     .post(protect, createList);
+
+// Bulk reorder lists
+router.post('/reorder', protect, reorderLists);
 
 // /api/lists/:id
 router.route('/:id')

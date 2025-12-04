@@ -1,145 +1,154 @@
 # Copilot Instructions for TaskFlow
 
-Welcome to the TaskFlow codebase! This document provides essential guidance for AI coding agents to be productive in this project. TaskFlow is a full-stack Kanban board application built with React, Node.js, Express, and MongoDB.
+TaskFlow is a full-stack real-time Kanban board with React 19, Vite, Node.js/Express, MongoDB, and Socket.IO. This guide helps AI agents understand non-obvious patterns and architectural decisions.
 
-## Project Overview
+## Architecture Overview
 
-### Architecture
-- **Frontend (Client):**
-  - Built with React 19, Vite, and Tailwind CSS.
-  - Located in the `client/` directory.
-  - Key components:
-    - `src/components/`: Reusable UI components (e.g., `CardItem`, `CardModal`).
-    - `src/pages/`: Page-level components (e.g., `Dashboard`, `BoardView`).
-    - `src/context/AuthContext.jsx`: Manages user authentication state.
-  - Styling:
-    - Tailwind CSS for utility-first styling.
-    - `src/index.css` and `src/App.css` for global styles.
+**Dual-Channel Communication:** HTTP REST API + WebSocket (Socket.IO)
+- REST API (`client/src/lib/api.js`) for CRUD operations with JWT auth via `Authorization: Bearer <token>`
+- Socket.IO (`client/src/lib/realtime.js`, `server/realtime/socket.js`) for live collaboration features:
+  - Presence tracking (who's viewing each board)
+  - Cursor positions and typing indicators
+  - Broadcast mutations (e.g., `board:created`, `list:updated`)
+  - Per-list focus counts
 
-- **Backend (Server):**
-  - Built with Node.js, Express, and MongoDB.
-  - Located in the `server/` directory.
-  - Key modules:
-    - `routes/`: API endpoints (e.g., `auth.js`, `boards.js`).
-    - `controllers/`: Business logic for routes (e.g., `authController.js`).
-    - `models/`: Mongoose models for MongoDB (e.g., `User.js`, `Board.js`).
-    - `middleware/`: Middleware functions (e.g., `authMiddleware.js`).
+**State Management Pattern:**
+- Local component state for UI (no Redux/Zustand)
+- `AuthContext` for global user state with JWT in `localStorage`
+- Real-time listeners synchronize state: e.g., `BoardView.jsx` subscribes to `list:created`, `card:updated` events to keep UI in sync
 
-### Data Flow
-- **Frontend:**
-  - State management is handled locally using React Context (e.g., `AuthContext`).
-  - API calls are made via `lib/api.js`.
-- **Backend:**
-  - RESTful API design.
-  - MongoDB is used for persistent storage, with Mongoose for schema definitions.
+**Data Flow Example (Creating a Card):**
+1. User action → `api.post('/api/lists/:listId/cards', data)` in component
+2. Backend controller creates card in MongoDB
+3. Controller calls `emitToBoard(boardId, 'card:created', { card })` to broadcast
+4. All connected clients in that board's Socket.IO room receive event and update local state
 
-## Developer Workflows
+## Critical Developer Workflows
 
-### Setting Up the Project
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/akwean/TaskFlow-gre.git
-   cd TaskFlow-gre
-   ```
-2. Set up the server:
-   ```bash
-   cd server
-   npm install
-   ```
-   Create a `.env` file with:
-   ```
-   MONGO_URI=mongodb://localhost:27017/taskflow
-   JWT_SECRET=your_jwt_secret_here
-   PORT=5000
-   ```
-3. Set up the client:
-   ```bash
-   cd ../client
-   npm install
-   ```
+**Running the app (2 terminals required):**
+```bash
+# Terminal 1: Backend (must start first)
+cd server && npm run dev  # nodemon on port 5000
 
-### Running the Application
-- Start the server:
-  ```bash
-  cd server
-  npm run dev
-  ```
-- Start the client:
-  ```bash
-  cd client
-  npm run dev
-  ```
-- Open the app at `http://localhost:5173`.
+# Terminal 2: Frontend
+cd client && npm run dev  # Vite on port 5173
+```
 
-### Testing
-- **Backend:** Add tests in `server/tests/` (not yet implemented).
-- **Frontend:** Add tests in `client/src/__tests__/` (not yet implemented).
+**Environment Setup:**
+`server/.env` must include:
+```
+MONGO_URI=mongodb://localhost:27017/taskflow
+JWT_SECRET=<secret>
+PORT=5000
+CLIENT_ORIGIN=http://localhost:5173
+```
 
-### Debugging
-- Use `console.log` for quick debugging.
-- For the backend, use `nodemon` for live reloads.
-- For the frontend, use Vite's hot module replacement (HMR).
+**Testing:**
+- Frontend: `cd client && npm test` (Vitest with jsdom, setup in `vitest.setup.js`)
+- Mock pattern in `client/src/__tests__/dashboard.test.jsx`:
+  - Mock `@/lib/api` and `@/context/AuthContext` to avoid async loading states
+  - Use `MemoryRouter` for route-aware components
 
-## Project-Specific Conventions
+## Project-Specific Patterns
 
-### Frontend
-- **Component Structure:**
-  - Use functional components with hooks.
-  - Place reusable components in `src/components/`.
-  - Group related components in subdirectories (e.g., `ui/` for low-level UI components).
-- **Styling:**
-  - Use Tailwind CSS classes directly in JSX.
-  - Avoid inline styles unless necessary.
+**1. Socket.IO Room Structure:**
+- `board:${boardId}` - All viewers of a board join this room for board-scoped events
+- `user:${userId}` - Personal room for user-specific notifications (e.g., board invites)
+- Authentication: JWT sent via `socket.handshake.auth.token` and verified in `server/realtime/socket.js`
 
-### Backend
-- **Routing:**
-  - Define routes in `routes/`.
-  - Use controllers in `controllers/` to separate business logic.
-- **Error Handling:**
-  - Use `next(err)` to pass errors to Express's error handler.
+**2. API Interceptors & Offline Queue:**
+`client/src/lib/api.js` has an offline mutation queue:
+- `queuedPut(url, data)` queues requests when offline, auto-retries on reconnect
+- Used for resilient drag-and-drop position updates
+
+**3. Controller → Socket.IO Broadcast Pattern:**
+All mutation controllers (`boardController.js`, `listController.js`, `cardController.js`) follow:
+```javascript
+// After DB update:
+const { emitToBoard } = require('../realtime/socket');
+emitToBoard(boardId, 'resource:action', { resource });
+```
+When adding new features, emit corresponding events after successful DB operations.
+
+**4. Drag-and-Drop with @dnd-kit:**
+`BoardView.jsx` uses `DndContext` for cards/lists:
+- `SortableContext` with `horizontalListSortingStrategy` for lists
+- Optimistic updates (UI changes before API call) with rollback on error
+- Position updates use `queuedPut` for offline resilience
+
+**5. Component Composition with Radix UI:**
+Low-level UI in `components/ui/` wraps Radix primitives:
+- `Dialog`, `Button`, `Input` expose Radix's accessible API
+- Styled with Tailwind using `cn()` utility from `lib/utils.js` (clsx + tailwind-merge)
+- Always import from `@/components/ui/*`, not Radix directly
+
+**6. Access Control Pattern:**
+Every protected route/controller checks:
+```javascript
+const hasAccess = board.owner.equals(req.user._id) || 
+  board.members.some(m => m.user.equals(req.user._id));
+if (!hasAccess) return res.status(403).json({ message: 'Access denied' });
+```
+Socket.IO validates board access in `join-board` event handler before allowing room join.
+
+**7. Frontend Testing Mocks:**
+Always mock these in Vitest tests:
+```javascript
+vi.mock('@/lib/api', () => ({ default: { get: vi.fn(() => ({ data: [] })) } }));
+vi.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: {}, loading: false }) }));
+```
 
 ## Integration Points
-- **Frontend to Backend Communication:**
-  - API calls are centralized in `client/src/lib/api.js`.
-- **Authentication:**
-  - JWT-based authentication.
-  - `AuthContext` manages the auth state on the frontend.
-  - `authMiddleware.js` protects routes on the backend.
 
-## External Dependencies
-- **Frontend:**
-  - `@dnd-kit`: Drag-and-drop functionality.
-  - `Radix UI`: Accessible UI components.
-- **Backend:**
-  - `mongoose`: MongoDB object modeling.
-  - `jsonwebtoken`: JWT handling.
+**Routes Registration (`server/index.js`):**
+```javascript
+app.use('/api/boards/:boardId/lists', require('./routes/lists')); // Nested resource
+app.use('/api/lists', require('./routes/lists')); // Top-level for direct access
+```
+Both patterns coexist. Use nested routes when context matters (e.g., creating lists for a board).
 
-## Examples
+**Mongoose Population:**
+Controllers always populate user references:
+```javascript
+.populate('owner', 'username email avatar')
+.populate('members.user', 'username email avatar')
+```
+Prevents exposing password hashes, keeps payloads small.
 
-### Adding a New API Endpoint
-1. Create a new route in `server/routes/` (e.g., `tasks.js`).
-2. Add the corresponding controller in `server/controllers/`.
-3. Update the frontend API calls in `client/src/lib/api.js`.
+**Path Aliases:**
+- `@/` resolves to `client/src/` (configured in `vite.config.js` and `jsconfig.json`)
+- Always use `@/components/...`, `@/lib/...`, never relative paths across directories
 
-### Creating a New Component
-1. Add the component in `client/src/components/`.
-2. Import and use it in the relevant page (e.g., `Dashboard.jsx`).
-3. Style it using Tailwind CSS.
+## Common Pitfalls
 
----
+- **Forgetting Socket.IO broadcasts:** New mutations won't sync across clients. Always call `emitToBoard` in controllers.
+- **Breaking Mongoose refs:** Models use `mongoose.Schema.Types.ObjectId, ref: 'Model'`. Don't change ref strings or populate will break.
+- **HMR issues:** Inline arrow functions in `useEffect` dependencies can break Vite HMR. Extract to named functions when possible.
+- **Auth token sync:** `AuthContext` and `api.js` both read from `localStorage.getItem('token')`. Keep them consistent.
+
+## Adding New Features
+
+**New Real-Time Feature (e.g., comments):**
+1. Add model in `server/models/Comment.js`
+2. Create controller/routes in `server/controllers/commentController.js`, `server/routes/comments.js`
+3. Emit events: `emitToBoard(boardId, 'comment:created', { comment })`
+4. Frontend: Subscribe in `BoardView.jsx` or relevant component:
+   ```javascript
+   onSocket('comment:created', ({ comment }) => setComments(prev => [...prev, comment]));
+   ```
+5. Clean up listener on unmount: `offSocket('comment:created', handler)`
+
+**New UI Component:**
+1. Place in `components/` (shared) or inline if page-specific
+2. Use Tailwind classes directly, no CSS modules
+3. For primitives, wrap Radix in `components/ui/` following existing pattern
 
 ## AI Editing Safeguards
 
-To preserve code integrity and prevent destructive edits, all AI agents must follow these rules when modifying the TaskFlow codebase:
+- **Never delete Socket.IO event handlers** without checking all listeners across client/server
+- **Preserve middleware chains:** `protect` middleware must remain on all private routes
+- **Don't rename Mongoose model refs** (breaks population throughout codebase)
+- **Avoid inline styles:** Use Tailwind utilities or extend `tailwind.config.js`
+- **Test real-time features:** Changes to socket handlers require manual browser testing with multiple tabs
 
-- Do not overwrite existing logic unless explicitly instructed. Always wrap new logic in conditionals or modular functions to avoid breaking current behavior.
-- Preserve component signatures and props. Avoid renaming or restructuring unless the change is scoped and justified.
-- Avoid mass refactors. Large-scale changes (e.g., file renames, directory restructuring) must be proposed first via comments or PR notes.
-- Respect Tailwind and Radix UI conventions. Do not replace utility classes or component structures with custom styles unless requested.
-- Never delete files, routes, or models. Use comments to suggest deprecation or alternatives.
-- Frontend edits must preserve HMR compatibility. Avoid changes that break Vite’s hot reload unless necessary.
-- Backend edits must preserve Express middleware chains and Mongoose schema integrity.
-
-If unsure, prefer commenting suggestions over direct edits. When in doubt, ask for clarification before proceeding.
-
-For questions or contributions, refer to the `README.md` or open an issue in the repository.
+When uncertain about a change's scope, propose it in a comment rather than implementing directly.

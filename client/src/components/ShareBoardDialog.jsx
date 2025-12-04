@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -49,6 +49,9 @@ const ShareBoardDialog = ({ board, onUpdate }) => {
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>Share Board</DialogTitle>
+                    <DialogDescription>
+                        Invite members to collaborate on this board by entering their email address.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4">
