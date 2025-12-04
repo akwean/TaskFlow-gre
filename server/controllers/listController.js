@@ -1,13 +1,14 @@
 const List = require('../models/List');
 const Card = require('../models/Card');
 const Board = require('../models/Board');
+const { emitToBoard } = require('../realtime/socket');
 
 // @desc    Get all lists for a board
 // @route   GET /api/boards/:boardId/lists
 // @access  Private
 const getLists = async (req, res) => {
     try {
-        const lists = await List.find({ board: req.params.boardId }).sort('order');
+        const lists = await List.find({ board: req.params.boardId }).sort('order').lean();
         res.json(lists);
     } catch (error) {
         console.error(error);
@@ -31,6 +32,8 @@ const createList = async (req, res) => {
             board: req.params.boardId,
             order,
         });
+        // Realtime: notify board listeners
+        emitToBoard(req.params.boardId, 'list:created', { list });
 
         res.status(201).json(list);
     } catch (error) {
@@ -56,6 +59,9 @@ const updateList = async (req, res) => {
         if (order !== undefined) list.order = order;
 
         await list.save();
+        // Realtime: notify board listeners
+        emitToBoard(list.board.toString(), 'list:updated', { list });
+
         res.json(list);
     } catch (error) {
         console.error(error);
@@ -77,6 +83,9 @@ const deleteList = async (req, res) => {
         // Delete all cards in this list
         await Card.deleteMany({ list: req.params.id });
         await List.findByIdAndDelete(req.params.id);
+
+        // Realtime: notify board listeners
+        emitToBoard(list.board.toString(), 'list:deleted', { listId: list._id });
 
         res.json({ message: 'List removed' });
     } catch (error) {

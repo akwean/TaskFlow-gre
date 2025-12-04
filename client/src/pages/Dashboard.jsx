@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, LogOut } from 'lucide-react';
 import api from '@/lib/api';
+import { getSocket, on as onSocket, off as offSocket, joinBoard, leaveBoard } from '@/lib/realtime';
 
 const Dashboard = () => {
     const { user, logout } = useAuth();
@@ -23,6 +24,48 @@ const Dashboard = () => {
 
     useEffect(() => {
         fetchBoards();
+        // Listen for realtime board creation/updates/deletes
+        const s = getSocket();
+        // For simplicity, listen to user-owned boards via joining each board room after fetch
+        const setupListeners = (items) => {
+            items.forEach(b => joinBoard(b._id));
+        };
+        const handleCreated = ({ board }) => {
+            setBoards(prev => (prev.find(b => b._id === board._id) ? prev : [...prev, board]));
+        };
+        const handleUpdated = ({ board }) => {
+            setBoards(prev => prev.map(b => (b._id === board._id ? board : b)));
+        };
+        const handleDeleted = ({ boardId }) => {
+            setBoards(prev => prev.filter(b => b._id !== boardId));
+        };
+        // Targeted events for this user when they are added or removed from a board
+        const handleDashboardAdded = ({ board }) => {
+            setBoards(prev => (prev.find(b => b._id === board._id) ? prev : [...prev, board]));
+            // Join the room to receive subsequent updates
+            joinBoard(board._id);
+        };
+        const handleDashboardRemoved = ({ boardId }) => {
+            setBoards(prev => prev.filter(b => b._id !== boardId));
+            // Leave the room to stop updates
+            leaveBoard(boardId);
+        };
+        onSocket('board:created', handleCreated);
+        onSocket('board:updated', handleUpdated);
+        onSocket('board:deleted', handleDeleted);
+        onSocket('dashboard:boardAdded', handleDashboardAdded);
+        onSocket('dashboard:boardRemoved', handleDashboardRemoved);
+
+        // After initial fetch, join rooms
+        // Cleanup on unmount
+        return () => {
+            offSocket('board:created', handleCreated);
+            offSocket('board:updated', handleUpdated);
+            offSocket('board:deleted', handleDeleted);
+            offSocket('dashboard:boardAdded', handleDashboardAdded);
+            offSocket('dashboard:boardRemoved', handleDashboardRemoved);
+            boards.forEach(b => leaveBoard(b._id));
+        };
     }, []);
 
     const fetchBoards = async () => {
@@ -30,6 +73,8 @@ const Dashboard = () => {
             const { data } = await api.get('/boards');
             setBoards(data);
             setLoading(false);
+            // Join each board room to receive updates on dashboard
+            data.forEach(b => joinBoard(b._id));
         } catch (error) {
             console.error(error);
             setLoading(false);

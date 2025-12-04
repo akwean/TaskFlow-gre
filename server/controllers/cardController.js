@@ -1,4 +1,6 @@
 const Card = require('../models/Card');
+const List = require('../models/List');
+const { emitToBoard } = require('../realtime/socket');
 
 // @desc    Get all cards for a list
 // @route   GET /api/lists/:listId/cards
@@ -7,7 +9,8 @@ const getCards = async (req, res) => {
     try {
         const cards = await Card.find({ list: req.params.listId })
             .sort('order')
-            .populate('members', 'username email avatar');
+            .populate('members', 'username email avatar')
+            .lean();
         res.json(cards);
     } catch (error) {
         console.error(error);
@@ -31,6 +34,11 @@ const createCard = async (req, res) => {
             list: req.params.listId,
             order,
         });
+        // Determine board id for realtime broadcast
+        const list = await List.findById(req.params.listId);
+        if (list) {
+            emitToBoard(list.board.toString(), 'card:created', { card });
+        }
 
         res.status(201).json(card);
     } catch (error) {
@@ -52,6 +60,8 @@ const updateCard = async (req, res) => {
             return res.status(404).json({ message: 'Card not found' });
         }
 
+        const oldListId = card.list?.toString();
+
         if (title !== undefined) card.title = title;
         if (description !== undefined) card.description = description;
         if (list !== undefined) card.list = list;
@@ -65,6 +75,20 @@ const updateCard = async (req, res) => {
 
         const updatedCard = await Card.findById(card._id)
             .populate('members', 'username email avatar');
+
+        // Realtime: broadcast update (including potential move across lists)
+        let boardId = null;
+        try {
+            const targetList = await List.findById(updatedCard.list);
+            if (targetList) boardId = targetList.board.toString();
+        } catch {}
+        if (boardId) {
+            emitToBoard(boardId, 'card:updated', {
+                card: updatedCard,
+                oldListId,
+                newListId: updatedCard.list?.toString(),
+            });
+        }
 
         res.json(updatedCard);
     } catch (error) {
@@ -84,7 +108,14 @@ const deleteCard = async (req, res) => {
             return res.status(404).json({ message: 'Card not found' });
         }
 
+        const list = await List.findById(card.list);
         await Card.findByIdAndDelete(req.params.id);
+
+        // Realtime: notify board listeners
+        if (list) {
+            emitToBoard(list.board.toString(), 'card:deleted', { cardId: card._id, listId: card.list?.toString() });
+        }
+
         res.json({ message: 'Card removed' });
     } catch (error) {
         console.error(error);

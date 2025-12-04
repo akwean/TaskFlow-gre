@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { getSocket } from '@/lib/realtime';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,7 +21,7 @@ const LABEL_COLORS = [
     { name: 'Black', color: '#344563' },
 ];
 
-const CardModal = ({ card, isOpen, onClose, onUpdate }) => {
+const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [dueDate, setDueDate] = useState('');
@@ -37,6 +38,8 @@ const CardModal = ({ card, isOpen, onClose, onUpdate }) => {
     const [lastSavedAt, setLastSavedAt] = useState(null);
     const titleInputRef = useRef(null);
     const descriptionRef = useRef(null);
+    const [descTypingUsers, setDescTypingUsers] = useState(new Set());
+    const typingTimeoutRef = useRef(null);
 
     const debouncedUpdate = useCallback(async () => {
         if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
@@ -99,6 +102,7 @@ const CardModal = ({ card, isOpen, onClose, onUpdate }) => {
         return () => {
             isMounted.current = false;
             if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         };
     }, []);
 
@@ -154,6 +158,30 @@ const CardModal = ({ card, isOpen, onClose, onUpdate }) => {
             console.error('Error flushing card update:', error);
             if (isMounted.current) setIsSaving(false);
         }
+    };
+
+    // Typing indicator for description
+    useEffect(() => {
+        const s = getSocket();
+        const onTyping = ({ userId, cardId, isTyping }) => {
+            if (!card || cardId !== card._id) return;
+            setDescTypingUsers((prev) => {
+                const next = new Set(prev);
+                if (isTyping) next.add(userId);
+                else next.delete(userId);
+                return next;
+            });
+        };
+        s.on('typing:card', onTyping);
+        return () => {
+            s.off('typing:card', onTyping);
+        };
+    }, [card]);
+
+    const emitTyping = (isTyping) => {
+        if (!card || !boardId) return;
+        const s = getSocket();
+        s.emit('typing:card', { boardId, cardId: card._id, isTyping });
     };
 
     const handleDelete = async () => {
@@ -319,11 +347,23 @@ const CardModal = ({ card, isOpen, onClose, onUpdate }) => {
 
                     {/* Description */}
                     <div>
-                        <Label htmlFor="description" className="mb-2 block">Description</Label>
+                        <div className="flex items-center gap-2 mb-2">
+                            <Label htmlFor="description">Description</Label>
+                            {descTypingUsers.size > 0 && (
+                                <span className="text-xs text-gray-500 italic">{descTypingUsers.size > 1 ? 'Multiple people' : 'Someone'} typing…</span>
+                            )}
+                        </div>
                         <Textarea
                             ref={descriptionRef}
                             value={description}
-                            onChange={(e) => setDescription(e.target.value)}
+                            onFocus={() => emitTyping(true)}
+                            onBlur={() => emitTyping(false)}
+                            onChange={(e) => {
+                                setDescription(e.target.value);
+                                emitTyping(true);
+                                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                                typingTimeoutRef.current = setTimeout(() => emitTyping(false), 800);
+                            }}
                             placeholder="Add a more detailed description..."
                             rows={4}
                             className="w-full max-w-2xl"

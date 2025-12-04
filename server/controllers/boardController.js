@@ -2,6 +2,7 @@ const Board = require('../models/Board');
 const List = require('../models/List');
 const Card = require('../models/Card');
 const User = require('../models/User');
+const { emitToBoard, emitToUser } = require('../realtime/socket');
 
 // @desc    Get all boards for user
 // @route   GET /api/boards
@@ -14,7 +15,8 @@ const getBoards = async (req, res) => {
                 { 'members.user': req.user._id }
             ]
         }).populate('owner', 'username email avatar')
-            .populate('members.user', 'username email avatar');
+            .populate('members.user', 'username email avatar')
+            .lean();
 
         res.json(boards);
     } catch (error) {
@@ -72,6 +74,9 @@ const createBoard = async (req, res) => {
             .populate('owner', 'username email avatar')
             .populate('members.user', 'username email avatar');
 
+        // Realtime: broadcast creation to board room (viewers on dashboard can listen)
+        emitToBoard(populatedBoard._id.toString(), 'board:created', { board: populatedBoard });
+
         res.status(201).json(populatedBoard);
     } catch (error) {
         console.error(error);
@@ -110,6 +115,9 @@ const updateBoard = async (req, res) => {
             .populate('owner', 'username email avatar')
             .populate('members.user', 'username email avatar');
 
+        // Realtime: notify board listeners
+        emitToBoard(updatedBoard._id.toString(), 'board:updated', { board: updatedBoard });
+
         res.json(updatedBoard);
     } catch (error) {
         console.error(error);
@@ -140,6 +148,9 @@ const deleteBoard = async (req, res) => {
         await List.deleteMany({ board: req.params.id });
 
         await Board.findByIdAndDelete(req.params.id);
+
+        // Realtime: notify board listeners
+        emitToBoard(req.params.id, 'board:deleted', { boardId: req.params.id });
 
         res.json({ message: 'Board removed' });
     } catch (error) {
@@ -194,6 +205,11 @@ const addBoardMember = async (req, res) => {
             .populate('owner', 'username email avatar')
             .populate('members.user', 'username email avatar');
 
+        // Realtime: notify board listeners
+        emitToBoard(updatedBoard._id.toString(), 'board:memberAdded', { board: updatedBoard });
+        // Also notify the newly added user so their dashboard updates immediately
+        emitToUser(userToAdd._id.toString(), 'dashboard:boardAdded', { board: updatedBoard });
+
         res.json(updatedBoard);
     } catch (error) {
         console.error(error);
@@ -232,6 +248,11 @@ const removeBoardMember = async (req, res) => {
         const updatedBoard = await Board.findById(board._id)
             .populate('owner', 'username email avatar')
             .populate('members.user', 'username email avatar');
+
+        // Realtime: notify board listeners
+        emitToBoard(updatedBoard._id.toString(), 'board:memberRemoved', { board: updatedBoard });
+        // Also notify the removed user so their dashboard removes it immediately
+        emitToUser(req.params.userId.toString(), 'dashboard:boardRemoved', { boardId: updatedBoard._id.toString() });
 
         res.json(updatedBoard);
     } catch (error) {

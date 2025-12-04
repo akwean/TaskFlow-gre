@@ -8,13 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Plus, MoreVertical } from 'lucide-react';
 import CardItem from './CardItem';
 
-const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDeleteList }) => {
+const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDeleteList, onListFocus, listPresenceCount = 0 }) => {
     const [newCardTitle, setNewCardTitle] = useState('');
     const [isAddingCard, setIsAddingCard] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editingTitle, setEditingTitle] = useState(list.title);
     const menuRef = useRef(null);
+    const hoveredRef = useRef(false);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -62,8 +63,10 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
     };
 
     return (
-        <div className="flex-shrink-0 w-72">
-            <div className="bg-gray-100 rounded-lg p-3 max-h-[calc(100vh-140px)] flex flex-col">
+           <div className="flex-shrink-0 w-64 sm:w-72"
+               onMouseEnter={() => { if (!hoveredRef.current) { hoveredRef.current = true; onListFocus?.(list._id, true); } }}
+               onMouseLeave={() => { if (hoveredRef.current) { hoveredRef.current = false; onListFocus?.(list._id, false); } }}>
+            <div className="bg-gray-100 rounded-lg p-2 sm:p-3 max-h-[calc(100vh-140px)] flex flex-col">
                 <div className="flex items-center justify-between mb-3 px-2">
                     {isEditingTitle ? (
                         <Input
@@ -81,9 +84,14 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
                             autoFocus
                         />
                     ) : (
-                        <h3 className="font-semibold text-gray-800 cursor-pointer flex-1" onClick={() => setIsEditingTitle(true)}>{list.title}</h3>
+                        <h3 className="font-semibold text-gray-800 cursor-pointer flex-1 text-sm sm:text-base" onClick={() => setIsEditingTitle(true)}>{list.title}</h3>
                     )}
-                    <div className="relative">
+                    <div className="relative flex items-center gap-2">
+                        {listPresenceCount > 0 && (
+                            <span className="inline-flex items-center justify-center text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                {listPresenceCount} here
+                            </span>
+                        )}
                         <Button
                             variant="ghost"
                             size="sm"
@@ -147,7 +155,7 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
                         onClick={() => setIsAddingCard(true)}
                         variant="ghost"
                         size="sm"
-                        className="w-full justify-start text-gray-600 hover:bg-gray-200"
+                        className="w-full justify-start text-gray-600 hover:bg-gray-200 text-sm"
                     >
                         <Plus className="w-4 h-4 mr-2" />
                         Add a card
