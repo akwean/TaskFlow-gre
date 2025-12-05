@@ -44,3 +44,23 @@ Thumbs.db
 # Misc
 *.tgz
 *.zip
+
+# Additional Node.js
+.npm
+.eslintcache
+.nyc_output
+
+# Vite cache
+.vite
+
+# Server-specific
+server/logs/
+server/*.db
+server/*.sqlite
+
+# Database dumps
+*.sql
+
+# Temporary files
+*.tmp
+*.temp
