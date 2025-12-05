@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
 const path = require('path');
+const fs = require('fs');
 const connectDB = require('./config/db');
 const { initSocket } = require('./realtime/socket');
 
@@ -56,11 +57,20 @@ app.get('/healthz', (req, res) => {
 // Serve frontend in production if built into server/client/dist
 if (process.env.NODE_ENV === 'production') {
     const distDir = path.join(__dirname, '..', 'client', 'dist');
-    app.use(express.static(distDir));
-    // Fallback to index.html for SPA routes; exclude API via regex
-    app.get(/^\/(?!api).*$/, (req, res) => {
-        res.sendFile(path.join(distDir, 'index.html'));
-    });
+    const indexFile = path.join(distDir, 'index.html');
+    if (fs.existsSync(indexFile)) {
+        app.use(express.static(distDir));
+        // Fallback to index.html for SPA routes; exclude API via regex
+        app.get(/^\/(?!api).*$/, (req, res) => {
+            res.sendFile(indexFile);
+        });
+    } else {
+        // If the static build isn't present, skip static serving to avoid ENOENT errors.
+        console.warn('Static client not found at', indexFile, '- skipping static serving.');
+        app.get('/', (req, res) => {
+            res.send('API is running...');
+        });
+    }
 } else {
     app.get('/', (req, res) => {
         res.send('API is running...');
