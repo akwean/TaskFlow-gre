@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getSocket } from '@/lib/realtime';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -184,17 +184,18 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
         s.emit('typing:card', { boardId, cardId: card._id, isTyping });
     };
 
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
     const handleDelete = async () => {
-        if (window.confirm('Are you sure you want to delete this card?')) {
-            try {
-                await api.delete(`/cards/${card._id}`);
-                onUpdate(null, true); // Signal deletion
-                onClose();
-            } catch (error) {
-                console.error(error);
-            }
+        try {
+            await api.delete(`/cards/${card._id}`);
+            onUpdate(null, true); // Signal deletion
+            onClose();
+            setShowDeleteDialog(false);
+        } catch (error) {
+            console.error(error);
         }
-    };
+    } 
 
     const addLabel = (labelColor) => {
         const existingLabel = labels.find(l => l.color === labelColor.color);
@@ -422,10 +423,29 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
 
                     {/* Actions */}
                     <div className="flex items-center justify-between pt-4 border-t">
-                        <Button variant="destructive" onClick={handleDelete}>
+                        <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
                             <Trash2 className="w-4 h-4 mr-2" />
                             Delete Card
                         </Button>
+                                    {/* Delete Card Confirmation Dialog */}
+                                    <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                                        <DialogContent>
+                                            <DialogHeader>
+                                                <DialogTitle>Delete Card</DialogTitle>
+                                                <DialogDescription>
+                                                    Are you sure you want to delete this card? This action cannot be undone.
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                            <DialogFooter>
+                                                <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+                                                    Cancel
+                                                </Button>
+                                                <Button variant="destructive" onClick={handleDelete}>
+                                                    Delete
+                                                </Button>
+                                            </DialogFooter>
+                                        </DialogContent>
+                                    </Dialog>
                         <span className="text-sm text-gray-500">{isSaving ? 'Saving...' : lastSavedAt ? 'Saved' : ''}</span>
                     </div>
                 </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,10 +29,16 @@ const ShareBoardDialog = ({ board, onUpdate }) => {
         }
     };
 
-    const handleRemoveMember = async (userId) => {
+    const [removeUserId, setRemoveUserId] = useState(null);
+    const [showRemoveDialog, setShowRemoveDialog] = useState(false);
+
+    const handleRemoveMember = async () => {
+        if (!removeUserId) return;
         try {
-            const { data } = await api.delete(`/boards/${board._id}/members/${userId}`);
+            const { data } = await api.delete(`/boards/${board._id}/members/${removeUserId}`);
             onUpdate(data);
+            setShowRemoveDialog(false);
+            setRemoveUserId(null);
         } catch (err) {
             console.error(err);
         }
@@ -94,12 +100,31 @@ const ShareBoardDialog = ({ board, onUpdate }) => {
                                         </span>
                                         {member.user?._id !== board.owner?._id && (
                                             <button
-                                                onClick={() => handleRemoveMember(member.user._id)}
+                                                onClick={() => { setRemoveUserId(member.user._id); setShowRemoveDialog(true); }}
                                                 className="text-red-500 hover:text-red-700"
                                             >
                                                 <X className="w-4 h-4" />
                                             </button>
                                         )}
+                                                {/* Remove Member Confirmation Dialog */}
+                                                <Dialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
+                                                    <DialogContent>
+                                                        <DialogHeader>
+                                                            <DialogTitle>Remove Member</DialogTitle>
+                                                            <DialogDescription>
+                                                                Are you sure you want to remove this member from the board? They will lose access immediately.
+                                                            </DialogDescription>
+                                                        </DialogHeader>
+                                                        <DialogFooter>
+                                                            <Button variant="outline" onClick={() => setShowRemoveDialog(false)}>
+                                                                Cancel
+                                                            </Button>
+                                                            <Button variant="destructive" onClick={handleRemoveMember}>
+                                                                Remove
+                                                            </Button>
+                                                        </DialogFooter>
+                                                    </DialogContent>
+                                                </Dialog>
                                     </div>
                                 </div>
                             ))}

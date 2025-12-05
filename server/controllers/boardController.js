@@ -74,6 +74,7 @@ const createBoard = async (req, res) => {
             .populate('owner', 'username email avatar')
             .populate('members.user', 'username email avatar');
 
+
         // Realtime: broadcast creation to board room (viewers on dashboard can listen)
         emitToBoard(populatedBoard._id.toString(), 'board:created', {
             board: populatedBoard,
@@ -83,6 +84,14 @@ const createBoard = async (req, res) => {
                 email: req.user.email,
                 avatar: req.user.avatar
             }
+        });
+
+        // Also notify all initial members (including owner) so their dashboards update immediately
+        const memberIds = [populatedBoard.owner._id.toString(), ...populatedBoard.members.map(m => m.user._id.toString())];
+        // Remove duplicates (owner may also be in members)
+        const uniqueMemberIds = [...new Set(memberIds)];
+        uniqueMemberIds.forEach(uid => {
+            emitToUser(uid, 'dashboard:boardAdded', { board: populatedBoard });
         });
 
         res.status(201).json(populatedBoard);
@@ -277,6 +286,8 @@ const removeBoardMember = async (req, res) => {
         emitToBoard(updatedBoard._id.toString(), 'board:memberRemoved', { board: updatedBoard });
         // Also notify the removed user so their dashboard removes it immediately
         emitToUser(req.params.userId.toString(), 'dashboard:boardRemoved', { boardId: updatedBoard._id.toString() });
+        // Force the removed user to leave the board if they are currently inside
+        emitToUser(req.params.userId.toString(), 'board:forceLeave', { boardId: updatedBoard._id.toString(), message: 'You have been removed from this board.' });
 
         res.json(updatedBoard);
     } catch (error) {

@@ -46,6 +46,10 @@ const BoardView = () => {
     const [activityOpen, setActivityOpen] = useState(false);
     const [activityItems, setActivityItems] = useState([]);
 
+    // Forced leave dialog state (must be at top level)
+    const [showForceLeaveDialog, setShowForceLeaveDialog] = useState(false);
+    const [forceLeaveMessage, setForceLeaveMessage] = useState('');
+
     // Deterministic pastel color from a string
     function stringToColor(str = '') {
         let hash = 0;
@@ -244,6 +248,12 @@ const BoardView = () => {
             setActivityItems((prev) => [{ title: 'Board updated', detail: payload.board?.title, at: Date.now(), user: payload.user }, ...prev].slice(0, 100));
         });
         onSocket('board:deleted', handleBoardDeleted);
+        onSocket('board:forceLeave', ({ boardId, message }) => {
+            if (boardId === id) {
+                setForceLeaveMessage(message || 'You have been removed from this board.');
+                setShowForceLeaveDialog(true);
+            }
+        });
         onSocket('presence:update', handlePresence);
         onSocket('cursor:move', (data) => {
             setCursors((prev) => ({ ...prev, [data.socketId]: data }));
@@ -283,6 +293,7 @@ const BoardView = () => {
             offSocket('card:deleted', handleCardDeleted);
             offSocket('board:updated', handleBoardUpdated);
             offSocket('board:deleted', handleBoardDeleted);
+            offSocket('board:forceLeave');
             offSocket('presence:update', handlePresence);
             offSocket('cursor:move');
             offSocket('cursor:leave');
@@ -912,6 +923,22 @@ const BoardView = () => {
             </Dialog>
         </div>
         <ActivityFeed items={activityItems} open={activityOpen} onClose={() => setActivityOpen(false)} />
+        {/* Forced Leave Board Dialog */}
+        <Dialog open={showForceLeaveDialog} onOpenChange={setShowForceLeaveDialog}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Access Removed</DialogTitle>
+                    <DialogDescription>
+                        {forceLeaveMessage}
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => { setShowForceLeaveDialog(false); navigate('/'); }}>
+                        OK
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
         <ToastContainer />
         </>
     );
