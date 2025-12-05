@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect, useContext } from 'react';
 import axios from 'axios';
+import api from '@/lib/api';
 
 const AuthContext = createContext();
 
@@ -19,7 +20,7 @@ export const AuthProvider = ({ children }) => {
                             Authorization: `Bearer ${token}`,
                         },
                     };
-                    const { data } = await axios.get('http://localhost:5000/api/auth/me', config);
+                    const { data } = await api.get('/auth/me', config);
                     setUser(data);
                 } catch (error) {
                     localStorage.removeItem('token');
@@ -33,14 +34,14 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const login = async (email, password) => {
-        const { data } = await axios.post('http://localhost:5000/api/auth/login', { email, password });
+        const { data } = await api.post('/auth/login', { email, password });
         localStorage.setItem('token', data.token);
         setUser(data);
         return data;
     };
 
     const register = async (username, email, password) => {
-        const { data } = await axios.post('http://localhost:5000/api/auth/register', { username, email, password });
+        const { data } = await api.post('/auth/register', { username, email, password });
         localStorage.setItem('token', data.token);
         setUser(data);
         return data;
