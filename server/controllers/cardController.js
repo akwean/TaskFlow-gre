@@ -61,15 +61,58 @@ const updateCard = async (req, res) => {
         }
 
         const oldListId = card.list?.toString();
+        const newListId = list !== undefined ? list.toString() : oldListId;
+        const orderChanged = order !== undefined || list !== undefined;
 
+        // Simple field updates
         if (title !== undefined) card.title = title;
         if (description !== undefined) card.description = description;
-        if (list !== undefined) card.list = list;
-        if (order !== undefined) card.order = order;
         if (labels !== undefined) card.labels = labels;
         if (members !== undefined) card.members = members;
         if (dueDate !== undefined) card.dueDate = dueDate;
         if (checklists !== undefined) card.checklists = checklists;
+
+        // Handle list/order changes with full reordering
+        if (orderChanged) {
+            const movingBetweenLists = oldListId !== newListId;
+            
+            if (movingBetweenLists) {
+                // Moving to different list: remove from old, insert into new
+                // 1. Remove from old list (shift down remaining cards)
+                const oldListCards = await Card.find({ list: oldListId, _id: { $ne: card._id } }).sort('order');
+                await Promise.all(oldListCards.map((c, i) => Card.findByIdAndUpdate(c._id, { order: i })));
+
+                // 2. Insert into new list at specified position
+                card.list = newListId;
+                const newListCards = await Card.find({ list: newListId }).sort('order');
+                const targetIndex = order !== undefined ? Math.min(order, newListCards.length) : newListCards.length;
+                
+                // Shift cards at/after insertion point
+                await Promise.all(newListCards.map((c, i) => {
+                    if (i >= targetIndex) {
+                        return Card.findByIdAndUpdate(c._id, { order: i + 1 });
+                    }
+                    return Promise.resolve();
+                }));
+                
+                card.order = targetIndex;
+            } else {
+                // Reordering within same list
+                const listCards = await Card.find({ list: oldListId, _id: { $ne: card._id } }).sort('order');
+                const targetIndex = order !== undefined ? Math.min(order, listCards.length) : listCards.length;
+                
+                // Renumber all cards to make room at targetIndex
+                await Promise.all(listCards.map((c, i) => {
+                    if (i >= targetIndex) {
+                        return Card.findByIdAndUpdate(c._id, { order: i + 1 });
+                    } else {
+                        return Card.findByIdAndUpdate(c._id, { order: i });
+                    }
+                }));
+                
+                card.order = targetIndex;
+            }
+        }
 
         await card.save();
 
@@ -82,12 +125,36 @@ const updateCard = async (req, res) => {
             const targetList = await List.findById(updatedCard.list);
             if (targetList) boardId = targetList.board.toString();
         } catch {}
+        
         if (boardId) {
             emitToBoard(boardId, 'card:updated', {
                 card: updatedCard,
                 oldListId,
                 newListId: updatedCard.list?.toString(),
             });
+
+            // If order or list changed, broadcast authoritative snapshots
+            if (orderChanged) {
+                try {
+                    const targetListId = updatedCard.list?.toString();
+                    if (targetListId) {
+                        const targetCards = await Card.find({ list: targetListId })
+                            .sort('order')
+                            .populate('members', 'username email avatar')
+                            .lean();
+                        emitToBoard(boardId, 'cards:reordered', { listId: targetListId, cards: targetCards });
+                    }
+                    if (oldListId && oldListId !== targetListId) {
+                        const sourceCards = await Card.find({ list: oldListId })
+                            .sort('order')
+                            .populate('members', 'username email avatar')
+                            .lean();
+                        emitToBoard(boardId, 'cards:reordered', { listId: oldListId, cards: sourceCards });
+                    }
+                } catch (e) {
+                    console.error('Failed to emit cards:reordered snapshot:', e);
+                }
+            }
         }
 
         res.json(updatedCard);

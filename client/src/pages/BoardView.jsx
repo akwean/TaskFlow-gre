@@ -42,6 +42,7 @@ const BoardView = () => {
     const [listPresence, setListPresence] = useState({}); // listId -> count
     const boardAreaRef = useRef(null);
     const cursorThrottleRef = useRef(false);
+    const activeDragCardIdRef = useRef(null);
     const [activityOpen, setActivityOpen] = useState(false);
     const [activityItems, setActivityItems] = useState([]);
 
@@ -160,11 +161,11 @@ const BoardView = () => {
         };
 
         const handleCardUpdated = ({ card, oldListId, newListId }) => {
-            // Ignore updates for cards that were recently updated locally
-            if (recentlyUpdatedCards.current.has(card._id)) {
+            // Ignore only the card currently being dragged locally
+            if (activeDragCardIdRef.current === card._id) {
                 return;
             }
-            
+
             setCards((prev) => {
                 const next = { ...prev };
                 const fromId = oldListId || card.list;
@@ -188,6 +189,14 @@ const BoardView = () => {
                 if (next[listId]) next[listId] = next[listId].filter((c) => c._id !== cardId);
                 return next;
             });
+        };
+
+        // Authoritative per-list snapshot: replace list cards with server order
+        const handleCardsReordered = ({ listId, cards: serverCards }) => {
+            setCards((prev) => ({
+                ...prev,
+                [listId]: (serverCards || []).slice().sort((a, b) => a.order - b.order)
+            }));
         };
 
         const handleBoardUpdated = ({ board }) => {
@@ -260,6 +269,7 @@ const BoardView = () => {
         onSocket('lists:reordered', ({ lists: serverLists }) => {
             setLists(serverLists);
         });
+        onSocket('cards:reordered', handleCardsReordered);
 
         // Join after listeners are registered to catch initial presence
         joinBoard(id);
@@ -279,6 +289,7 @@ const BoardView = () => {
             offSocket('typing:boardTitle');
             offSocket('list:presence');
             offSocket('lists:reordered');
+            offSocket('cards:reordered', handleCardsReordered);
             leaveBoard(id);
         };
     }, [id, navigate]);
@@ -343,39 +354,6 @@ const BoardView = () => {
         }
     };
 
-    // Track recently updated cards to avoid socket interference
-    const recentlyUpdatedCards = useRef(new Set());
-    
-    // Debounce queue for card order sync
-    const orderOpsRef = useRef([]);
-    const orderTimerRef = useRef(null);
-    const scheduleCardOrderSync = useCallback((ops) => {
-        // Mark cards as recently updated
-        ops.forEach(op => recentlyUpdatedCards.current.add(op.id));
-        
-        orderOpsRef.current.push(...ops);
-        if (orderTimerRef.current) clearTimeout(orderTimerRef.current);
-        orderTimerRef.current = setTimeout(async () => {
-            const batch = orderOpsRef.current;
-            orderOpsRef.current = [];
-            try {
-                await Promise.all(batch.map((op) => {
-                    if (op.list !== undefined) return queuedPut(`/cards/${op.id}`, { list: op.list, order: op.order });
-                    return queuedPut(`/cards/${op.id}`, { order: op.order });
-                }));
-                
-                // Clear recently updated cards after a delay
-                setTimeout(() => {
-                    batch.forEach(op => recentlyUpdatedCards.current.delete(op.id));
-                }, 100);
-            } catch (e) {
-                console.error(e);
-                // Clear on error too
-                batch.forEach(op => recentlyUpdatedCards.current.delete(op.id));
-            }
-        }, 50);
-    }, []);
-
     const handleDragStart = useCallback((event) => {
         const { active } = event;
         const activeId = active.id;
@@ -390,6 +368,9 @@ const BoardView = () => {
         console.groupEnd();
         
         setActiveId(activeId);
+        if (isCardDrag) {
+            activeDragCardIdRef.current = activeId;
+        }
     }, [lists, cards]);
 
     const handleDragOver = useCallback((event) => {
@@ -410,7 +391,7 @@ const BoardView = () => {
     const handleCardDragEnd = useCallback(async (event) => {
         const { active, over } = event;
 
-        console.group('🎴 CARD DRAG END - Detailed Analysis');
+        console.group('🎴 CARD DRAG END - Server-Authoritative');
         console.log('Active ID:', active.id);
         console.log('Over ID:', over?.id || 'null');
 
@@ -427,32 +408,20 @@ const BoardView = () => {
         let sourceListId = null;
         let targetListId = null;
 
-        console.log('\n📊 Analyzing lists and cards:');
         for (const [listId, listCards] of Object.entries(cards)) {
-            const listInfo = lists.find(l => l._id === listId);
-            console.log(`  List "${listInfo?.title || listId}" (${listId}):`, listCards.map(c => c.title));
-
             if (listCards.some(c => c._id === activeId)) {
                 sourceListId = listId;
-                console.log(`    ✓ Found SOURCE card in this list`);
             }
             if (listCards.some(c => c._id === overId)) {
                 targetListId = listId;
-                console.log(`    ✓ Found TARGET card in this list`);
             }
             if (listId === overId) {
                 targetListId = listId;
-                console.log(`    ✓ Dropped on list container itself`);
             }
             if (overId === `${listId}__end`) {
                 targetListId = listId;
-                console.log(`    ✓ Dropped on END target of this list`);
             }
         }
-
-        console.log('\n🎯 Determined:');
-        console.log('  Source List ID:', sourceListId);
-        console.log('  Target List ID:', targetListId);
 
         if (!sourceListId) {
             console.log('❌ Could not find source list!');
@@ -461,102 +430,61 @@ const BoardView = () => {
         }
         if (!targetListId) {
             targetListId = sourceListId;
-            console.log('⚠️ No target list found, using source list');
         }
 
-        const sourceCards = [...cards[sourceListId]];
-        const targetCards = [...cards[targetListId]];
+        const sourceCards = cards[sourceListId] || [];
+        const targetCards = cards[targetListId] || [];
 
         const activeIndex = sourceCards.findIndex(c => c._id === activeId);
         const overIndex = targetCards.findIndex(c => c._id === overId);
-        const isOverList = overId === targetListId || overId === `${targetListId}__end`; // dropped on list container or end target
         const isOverEndTarget = overId === `${targetListId}__end`;
-        const newIndex = isOverList ? targetCards.length : (overIndex < 0 ? targetCards.length : overIndex);
-
-        console.log('\n📍 Index Calculations:');
-        console.log('  Active Index (in source):', activeIndex);
-        console.log('  Over Index (in target):', overIndex);
-        console.log('  Is Over List Container:', isOverList);
-        console.log('  Is Over End Target:', isOverEndTarget);
-        console.log('  Calculated New Index:', newIndex);
-        console.log('  Source Cards Count:', sourceCards.length);
-        console.log('  Target Cards Count:', targetCards.length);
-
-        // Move card between lists or reorder within same list
-        if (sourceListId !== targetListId) {
-            console.log('\n🔄 MOVING BETWEEN LISTS');
-            console.log('  From:', lists.find(l => l._id === sourceListId)?.title);
-            console.log('  To:', lists.find(l => l._id === targetListId)?.title);
-
-            // Moving between lists
-            const [movedCard] = sourceCards.splice(activeIndex, 1);
-            console.log('  Moved Card:', movedCard.title);
-            console.log('  Inserting at index:', newIndex);
-
-            const inserted = [...targetCards];
-            inserted.splice(newIndex, 0, movedCard);
-            const updatedTargetCards = inserted.map((card, index) => ({ ...card, order: index }));
-
-            console.log('  New target list order:', updatedTargetCards.map(c => c.title));
-
-            setCards({
-                ...cards,
-                [sourceListId]: sourceCards,
-                [targetListId]: updatedTargetCards
-            });
-
-            // Optimistic batch update on server (offline resilient)
-            try {
-                scheduleCardOrderSync([
-                    { id: activeId, list: targetListId, order: newIndex },
-                    ...updatedTargetCards.filter((c) => c._id !== activeId).map((c, i) => ({ id: c._id, order: i }))
-                ]);
-            } catch (error) {
-                console.error(error);
-                // Revert on error
-                fetchBoardData();
-                add('Reorder failed. Restoring state.', 'error');
-            }
+        const isOverList = overId === targetListId || isOverEndTarget;
+        
+        // Calculate target index: where we want to insert in the target list
+        let newIndex;
+        if (isOverEndTarget || isOverList) {
+            // Dropped on list container or end target → insert at end
+            newIndex = targetCards.length;
+        } else if (overIndex >= 0) {
+            // Dropped on another card → insert at that position
+            newIndex = overIndex;
         } else {
-            console.log('\n🔃 REORDERING WITHIN SAME LIST');
-            console.log('  List:', lists.find(l => l._id === sourceListId)?.title);
-
-            // Reordering within same list
-            const oldIndex = activeIndex;
-            console.log('  Old Index:', oldIndex);
-            console.log('  New Index (overIndex):', overIndex);
-            console.log('  Calculated newIndex:', newIndex);
-
-            if (oldIndex !== overIndex && overIndex >= 0) {
-                console.log('  ✓ Performing reorder');
-                const moved = arrayMove(sourceCards, oldIndex, overIndex).map((card, index) => ({ ...card, order: index }));
-                console.log('  New order:', moved.map(c => c.title));
-
-                setCards({
-                    ...cards,
-                    [sourceListId]: moved
-                });
-
-                // Debounced batch update to server
-                try {
-                    scheduleCardOrderSync([
-                        { id: activeId, order: overIndex },
-                        ...moved.filter((c) => c._id !== activeId).map((c, i) => ({ id: c._id, order: i }))
-                    ]);
-                } catch (error) {
-                    console.error(error);
-                    // Revert on error
-                    fetchBoardData();
-                    add('Reorder failed. Restoring state.', 'error');
-                }
-            } else {
-                console.log('  ⚠️ Skipping reorder: oldIndex === overIndex or overIndex < 0');
-            }
+            // Fallback: append
+            newIndex = targetCards.length;
         }
 
-        console.log('\n\u2705 Card drag end completed');
+        console.log('📍 Move details:', {
+            from: lists.find(l => l._id === sourceListId)?.title,
+            to: lists.find(l => l._id === targetListId)?.title,
+            activeIndex,
+            newIndex,
+            sourceCount: sourceCards.length,
+            targetCount: targetCards.length
+        });
+
+        // Send update to server immediately; let server broadcast authoritative state
+        try {
+            if (sourceListId !== targetListId) {
+                // Moving between lists
+                console.log('🔄 MOVING BETWEEN LISTS - sending to server');
+                await queuedPut(`/cards/${activeId}`, { list: targetListId, order: newIndex });
+            } else {
+                // Reordering within same list
+                console.log('🔃 REORDERING WITHIN SAME LIST - sending to server');
+                if (activeIndex !== newIndex) {
+                    await queuedPut(`/cards/${activeId}`, { order: newIndex });
+                } else {
+                    console.log('⚠️ No-op: same position');
+                }
+            }
+            console.log('✅ Server request sent; awaiting cards:reordered broadcast');
+        } catch (error) {
+            console.error('❌ Server update failed:', error);
+            add('Reorder failed.', 'error');
+        }
+
         console.groupEnd();
-    }, [cards, lists, scheduleCardOrderSync, fetchBoardData, add]);
+    }, [cards, lists, add]);
 
     // Reorder lists horizontally (dragging list headers)
     const handleListDragEnd = useCallback(async ({ active, over }) => {
@@ -647,6 +575,7 @@ const BoardView = () => {
             console.log('⚠️ Unknown drag type - aborting');
             console.groupEnd();
         }
+        activeDragCardIdRef.current = null;
         setActiveId(null);
     }, [lists, cards, handleListDragEnd, handleCardDragEnd]);
 
