@@ -75,7 +75,15 @@ const createBoard = async (req, res) => {
             .populate('members.user', 'username email avatar');
 
         // Realtime: broadcast creation to board room (viewers on dashboard can listen)
-        emitToBoard(populatedBoard._id.toString(), 'board:created', { board: populatedBoard });
+        emitToBoard(populatedBoard._id.toString(), 'board:created', {
+            board: populatedBoard,
+            user: req.user && {
+                id: req.user._id,
+                username: req.user.username,
+                email: req.user.email,
+                avatar: req.user.avatar
+            }
+        });
 
         res.status(201).json(populatedBoard);
     } catch (error) {
@@ -116,7 +124,15 @@ const updateBoard = async (req, res) => {
             .populate('members.user', 'username email avatar');
 
         // Realtime: notify board listeners
-        emitToBoard(updatedBoard._id.toString(), 'board:updated', { board: updatedBoard });
+        emitToBoard(updatedBoard._id.toString(), 'board:updated', {
+            board: updatedBoard,
+            user: req.user && {
+                id: req.user._id,
+                username: req.user.username,
+                email: req.user.email,
+                avatar: req.user.avatar
+            }
+        });
 
         res.json(updatedBoard);
     } catch (error) {
@@ -150,7 +166,15 @@ const deleteBoard = async (req, res) => {
         await Board.findByIdAndDelete(req.params.id);
 
         // Realtime: notify board listeners
-        emitToBoard(req.params.id, 'board:deleted', { boardId: req.params.id });
+        emitToBoard(req.params.id, 'board:deleted', {
+            boardId: req.params.id,
+            user: req.user && {
+                id: req.user._id,
+                username: req.user.username,
+                email: req.user.email,
+                avatar: req.user.avatar
+            }
+        });
 
         res.json({ message: 'Board removed' });
     } catch (error) {

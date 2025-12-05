@@ -217,31 +217,31 @@ const BoardView = () => {
 
         onSocket('list:created', (payload) => {
             handleListCreated(payload);
-            setActivityItems((prev) => [{ title: 'List created', detail: payload.list?.title, at: Date.now() }, ...prev].slice(0, 100));
+            setActivityItems((prev) => [{ title: 'List created', detail: payload.list?.title, at: Date.now(), user: payload.user }, ...prev].slice(0, 100));
         });
         onSocket('list:updated', (payload) => {
             handleListUpdated(payload);
-            setActivityItems((prev) => [{ title: 'List updated', detail: payload.list?.title, at: Date.now() }, ...prev].slice(0, 100));
+            setActivityItems((prev) => [{ title: 'List updated', detail: payload.list?.title, at: Date.now(), user: payload.user }, ...prev].slice(0, 100));
         });
         onSocket('list:deleted', (payload) => {
             handleListDeleted(payload);
-            setActivityItems((prev) => [{ title: 'List deleted', detail: '', at: Date.now() }, ...prev].slice(0, 100));
+            setActivityItems((prev) => [{ title: 'List deleted', detail: '', at: Date.now(), user: payload.user }, ...prev].slice(0, 100));
         });
         onSocket('card:created', (payload) => {
             handleCardCreated(payload);
-            setActivityItems((prev) => [{ title: 'Card created', detail: payload.card?.title, at: Date.now() }, ...prev].slice(0, 100));
+            setActivityItems((prev) => [{ title: 'Card created', detail: payload.card?.title, at: Date.now(), user: payload.user }, ...prev].slice(0, 100));
         });
         onSocket('card:updated', (payload) => {
             handleCardUpdated(payload);
-            setActivityItems((prev) => [{ title: 'Card updated', detail: payload.card?.title, at: Date.now() }, ...prev].slice(0, 100));
+            setActivityItems((prev) => [{ title: 'Card updated', detail: payload.card?.title, at: Date.now(), user: payload.user }, ...prev].slice(0, 100));
         });
         onSocket('card:deleted', (payload) => {
             handleCardDeleted(payload);
-            setActivityItems((prev) => [{ title: 'Card deleted', detail: '', at: Date.now() }, ...prev].slice(0, 100));
+            setActivityItems((prev) => [{ title: 'Card deleted', detail: '', at: Date.now(), user: payload.user }, ...prev].slice(0, 100));
         });
         onSocket('board:updated', (payload) => {
             handleBoardUpdated(payload);
-            setActivityItems((prev) => [{ title: 'Board updated', detail: payload.board?.title, at: Date.now() }, ...prev].slice(0, 100));
+            setActivityItems((prev) => [{ title: 'Board updated', detail: payload.board?.title, at: Date.now(), user: payload.user }, ...prev].slice(0, 100));
         });
         onSocket('board:deleted', handleBoardDeleted);
         onSocket('presence:update', handlePresence);

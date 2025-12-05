@@ -36,8 +36,17 @@ const createCard = async (req, res) => {
         });
         // Determine board id for realtime broadcast
         const list = await List.findById(req.params.listId);
+
         if (list) {
-            emitToBoard(list.board.toString(), 'card:created', { card });
+            emitToBoard(list.board.toString(), 'card:created', {
+                card,
+                user: req.user && {
+                    id: req.user._id,
+                    username: req.user.username,
+                    email: req.user.email,
+                    avatar: req.user.avatar
+                }
+            });
         }
 
         res.status(201).json(card);
@@ -131,6 +140,12 @@ const updateCard = async (req, res) => {
                 card: updatedCard,
                 oldListId,
                 newListId: updatedCard.list?.toString(),
+                user: req.user && {
+                    id: req.user._id,
+                    username: req.user.username,
+                    email: req.user.email,
+                    avatar: req.user.avatar
+                }
             });
 
             // If order or list changed, broadcast authoritative snapshots
@@ -179,8 +194,18 @@ const deleteCard = async (req, res) => {
         await Card.findByIdAndDelete(req.params.id);
 
         // Realtime: notify board listeners
+
         if (list) {
-            emitToBoard(list.board.toString(), 'card:deleted', { cardId: card._id, listId: card.list?.toString() });
+            emitToBoard(list.board.toString(), 'card:deleted', {
+                cardId: card._id,
+                listId: card.list?.toString(),
+                user: req.user && {
+                    id: req.user._id,
+                    username: req.user.username,
+                    email: req.user.email,
+                    avatar: req.user.avatar
+                }
+            });
         }
 
         res.json({ message: 'Card removed' });

@@ -33,7 +33,15 @@ const createList = async (req, res) => {
             order,
         });
         // Realtime: notify board listeners
-        emitToBoard(req.params.boardId, 'list:created', { list });
+        emitToBoard(req.params.boardId, 'list:created', {
+            list,
+            user: req.user && {
+                id: req.user._id,
+                username: req.user.username,
+                email: req.user.email,
+                avatar: req.user.avatar
+            }
+        });
 
         res.status(201).json(list);
     } catch (error) {
@@ -60,7 +68,15 @@ const updateList = async (req, res) => {
 
         await list.save();
         // Realtime: notify board listeners
-        emitToBoard(list.board.toString(), 'list:updated', { list });
+        emitToBoard(list.board.toString(), 'list:updated', {
+            list,
+            user: req.user && {
+                id: req.user._id,
+                username: req.user.username,
+                email: req.user.email,
+                avatar: req.user.avatar
+            }
+        });
 
         res.json(list);
     } catch (error) {
@@ -85,7 +101,15 @@ const deleteList = async (req, res) => {
         await List.findByIdAndDelete(req.params.id);
 
         // Realtime: notify board listeners
-        emitToBoard(list.board.toString(), 'list:deleted', { listId: list._id });
+        emitToBoard(list.board.toString(), 'list:deleted', {
+            listId: list._id,
+            user: req.user && {
+                id: req.user._id,
+                username: req.user.username,
+                email: req.user.email,
+                avatar: req.user.avatar
+            }
+        });
 
         res.json({ message: 'List removed' });
     } catch (error) {
