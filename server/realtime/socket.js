@@ -11,7 +11,10 @@ const listFocus = new Map();
 function initSocket(httpServer) {
     io = new Server(httpServer, {
         cors: {
-            origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+            origin: (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean),
             methods: ['GET', 'POST'],
             credentials: true,
         },
