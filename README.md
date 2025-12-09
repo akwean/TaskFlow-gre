@@ -25,15 +25,21 @@ A full-stack Kanban board application similar to Trello, built with React, Node.
    ```
    Create a `.env` file in the `server/` directory with the following variables:
    ```
-   MONGO_URI=mongodb://localhost:27017/taskflow
-   JWT_SECRET=your_jwt_secret_here
+   MONGO_URI=mongodb://localhost:27017/taskflow(change this)
+   JWT_SECRET=your_jwt_secret_here(change this)
    PORT=5000
+   NODE_ENV=production
+   CLIENT_ORIGIN=http://localhost:5173
    ```
 
 3. **Set up the client:**
    ```bash
    cd ../client
    npm install
+   ```
+      Create a `.env` file in the `client/` directory with the following variables:
+   ```
+   VITE_API_BASE_URL=http://localhost:5000/api
    ```
 
 4. **Run the application:**
