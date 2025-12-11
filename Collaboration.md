@@ -34,10 +34,10 @@ GitHub Collaboration Guide for Beginners
 
 - Before you start working, **pull the latest changes** from the main branch to avoid conflicts:
   ```sh
-  git checkout main
-  git pull origin main
+  git checkout dev
+  git pull origin dev
   git checkout feat/your-feature-name
-  git merge main
+  git merge dev
   ```
 - Resolve any merge conflicts if they appear.
 
