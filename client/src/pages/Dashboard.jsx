@@ -17,6 +17,9 @@ const Dashboard = () => {
     const [newBoardTitle, setNewBoardTitle] = useState('');
     const [newBoardBg, setNewBoardBg] = useState('#0079bf');
 
+    //Added search state
+    const [search, setSearch] = useState('');
+
     const colors = [
         '#0079bf', '#d29034', '#519839', '#b04632', '#89609e',
         '#cd5a91', '#4bbf6b', '#00aecc', '#838c91'
@@ -26,10 +29,7 @@ const Dashboard = () => {
         fetchBoards();
         // Listen for realtime board creation/updates/deletes
         const s = getSocket();
-        // For simplicity, listen to user-owned boards via joining each board room after fetch
-        const setupListeners = (items) => {
-            items.forEach(b => joinBoard(b._id));
-        };
+
         const handleCreated = ({ board }) => {
             setBoards(prev => (prev.find(b => b._id === board._id) ? prev : [...prev, board]));
         };
@@ -42,7 +42,7 @@ const Dashboard = () => {
         // Targeted events for this user when they are added or removed from a board
         const handleDashboardAdded = ({ board }) => {
             setBoards(prev => (prev.find(b => b._id === board._id) ? prev : [...prev, board]));
-            // Join the room to receive subsequent updates
+        // Join the room to receive subsequent updates
             joinBoard(board._id);
         };
         const handleDashboardRemoved = ({ boardId }) => {
@@ -50,6 +50,7 @@ const Dashboard = () => {
             // Leave the room to stop updates
             leaveBoard(boardId);
         };
+
         onSocket('board:created', handleCreated);
         onSocket('board:updated', handleUpdated);
         onSocket('board:deleted', handleDeleted);
@@ -97,9 +98,23 @@ const Dashboard = () => {
         }
     };
 
-    if (loading) {
-        return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-    }
+    // Filter boards based on search
+    const filteredBoards = boards.filter(board =>
+        board.title.toLowerCase().includes(search.toLowerCase())
+    );
+
+   if (loading) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="flex space-x-2">
+        <div className="w-4 h-4 bg-blue-500 rounded-full animate-bounce"></div>
+        <div className="w-4 h-4 bg-blue-500 rounded-full animate-bounce delay-150"></div>
+        <div className="w-4 h-4 bg-blue-500 rounded-full animate-bounce delay-300"></div>
+      </div>
+      <p className="mt-2 text-blue-700 font-medium">Loading...</p>
+    </div>
+  );
+}
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -124,14 +139,26 @@ const Dashboard = () => {
                 <div className="mb-8">
                     <h2 className="text-xl font-semibold text-gray-800 mb-4">Your Boards</h2>
 
+                    {/* Search Bar */}
+                    <Input
+                        type="text"
+                        placeholder="Search boards..."
+                        className="mb-6 max-w-sm"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {/* Create New Board Card */}
+
+                        {/* Create Board Card */}
                         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                             <DialogTrigger asChild>
                                 <button className="h-32 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all flex items-center justify-center group">
                                     <div className="text-center">
                                         <Plus className="w-8 h-8 mx-auto text-gray-400 group-hover:text-gray-600 mb-2" />
-                                        <span className="text-sm font-medium text-gray-600 group-hover:text-gray-800">Create new board</span>
+                                        <span className="text-sm font-medium text-gray-600 group-hover:text-gray-800">
+                                            Create new board
+                                        </span>
                                     </div>
                                 </button>
                             </DialogTrigger>
@@ -158,8 +185,7 @@ const Dashboard = () => {
                                                     key={color}
                                                     type="button"
                                                     onClick={() => setNewBoardBg(color)}
-                                                    className={`h-12 rounded-md transition-all ${newBoardBg === color ? 'ring-2 ring-offset-2 ring-blue-500' : ''
-                                                        }`}
+                                                    className={`h-12 rounded-md transition-all ${newBoardBg === color ? 'ring-2 ring-offset-2 ring-blue-500' : ''}`}
                                                     style={{ backgroundColor: color }}
                                                 />
                                             ))}
@@ -171,7 +197,7 @@ const Dashboard = () => {
                         </Dialog>
 
                         {/* Board Cards */}
-                        {boards.map((board) => (
+                        {filteredBoards.map((board) => (
                             <button
                                 key={board._id}
                                 onClick={() => navigate(`/board/${board._id}`)}
@@ -186,9 +212,9 @@ const Dashboard = () => {
                         ))}
                     </div>
 
-                    {boards.length === 0 && (
+                    {filteredBoards.length === 0 && (
                         <div className="text-center py-12">
-                            <p className="text-gray-500">No boards yet. Create your first board to get started!</p>
+                            <p className="text-gray-500">No matching boards found.</p>
                         </div>
                     )}
                 </div>

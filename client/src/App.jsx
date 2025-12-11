@@ -12,9 +12,18 @@ import { setOnlineState } from '@/lib/api';
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
+   if (loading) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="flex space-x-2">
+        <div className="w-4 h-4 bg-blue-500 rounded-full animate-bounce"></div>
+        <div className="w-4 h-4 bg-blue-500 rounded-full animate-bounce delay-150"></div>
+        <div className="w-4 h-4 bg-blue-500 rounded-full animate-bounce delay-300"></div>
+      </div>
+      <p className="mt-2 text-blue-700 font-medium">Loading...</p>
+    </div>
+  );
+}
 
   return user ? children : <Navigate to="/login" />;
 };
