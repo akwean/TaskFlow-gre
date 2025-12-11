@@ -18,6 +18,45 @@ const getBoards = async (req, res) => {
             .populate('members.user', 'username email avatar')
             .lean();
 
+        // Attach lists and cards for each board so the dashboard can show previews
+        try {
+            const boardIds = boards.map(b => b._id);
+            if (boardIds.length > 0) {
+                const lists = await List.find({ board: { $in: boardIds } }).lean();
+                const listIds = lists.map(l => l._id);
+                const cards = listIds.length > 0 ? await Card.find({ list: { $in: listIds } }).lean() : [];
+
+                // Group cards by list id
+                const cardsByList = cards.reduce((acc, c) => {
+                    const lid = String(c.list);
+                    if (!acc[lid]) acc[lid] = [];
+                    acc[lid].push(c);
+                    return acc;
+                }, {});
+
+                // Attach cards to lists
+                const listsByBoard = lists.map(l => ({
+                    ...l,
+                    cards: (cardsByList[String(l._id)] || []).sort((a, b) => (a.order || 0) - (b.order || 0))
+                })).reduce((acc, l) => {
+                    const bid = String(l.board);
+                    if (!acc[bid]) acc[bid] = [];
+                    acc[bid].push(l);
+                    return acc;
+                }, {});
+
+                // Attach lists to boards
+                for (const b of boards) {
+                    b.lists = listsByBoard[String(b._id)] || [];
+                }
+            } else {
+                // No boards, nothing to attach
+            }
+        } catch (innerErr) {
+            console.error('Error populating boards lists/cards:', innerErr);
+            // Non-fatal: still return boards without lists
+        }
+
         res.json(boards);
     } catch (error) {
         console.error(error);

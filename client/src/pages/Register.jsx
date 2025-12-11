@@ -20,7 +20,10 @@ const Register = () => {
             await register(username, email, password);
             navigate('/');
         } catch (err) {
-            setError(err.response?.data?.message || 'Failed to register');
+            // Log error for easier debugging and show best available message
+            console.error('Register error:', err);
+            const message = err?.response?.data?.message || err?.message || err?.toString() || 'Failed to register';
+            setError(message);
         }
     };
 

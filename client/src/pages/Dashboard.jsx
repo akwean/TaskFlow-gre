@@ -17,6 +17,10 @@ const Dashboard = () => {
     const [newBoardTitle, setNewBoardTitle] = useState('');
     const [newBoardBg, setNewBoardBg] = useState('#0079bf');
 
+    // ⭐ NEW: Preview State
+    const [hoverBoard, setHoverBoard] = useState(null);
+    const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
+
     const colors = [
         '#0079bf', '#d29034', '#519839', '#b04632', '#89609e',
         '#cd5a91', '#4bbf6b', '#00aecc', '#838c91'
@@ -24,12 +28,9 @@ const Dashboard = () => {
 
     useEffect(() => {
         fetchBoards();
-        // Listen for realtime board creation/updates/deletes
+
         const s = getSocket();
-        // For simplicity, listen to user-owned boards via joining each board room after fetch
-        const setupListeners = (items) => {
-            items.forEach(b => joinBoard(b._id));
-        };
+
         const handleCreated = ({ board }) => {
             setBoards(prev => (prev.find(b => b._id === board._id) ? prev : [...prev, board]));
         };
@@ -39,25 +40,21 @@ const Dashboard = () => {
         const handleDeleted = ({ boardId }) => {
             setBoards(prev => prev.filter(b => b._id !== boardId));
         };
-        // Targeted events for this user when they are added or removed from a board
         const handleDashboardAdded = ({ board }) => {
             setBoards(prev => (prev.find(b => b._id === board._id) ? prev : [...prev, board]));
-            // Join the room to receive subsequent updates
             joinBoard(board._id);
         };
         const handleDashboardRemoved = ({ boardId }) => {
             setBoards(prev => prev.filter(b => b._id !== boardId));
-            // Leave the room to stop updates
             leaveBoard(boardId);
         };
+
         onSocket('board:created', handleCreated);
         onSocket('board:updated', handleUpdated);
         onSocket('board:deleted', handleDeleted);
         onSocket('dashboard:boardAdded', handleDashboardAdded);
         onSocket('dashboard:boardRemoved', handleDashboardRemoved);
 
-        // After initial fetch, join rooms
-        // Cleanup on unmount
         return () => {
             offSocket('board:created', handleCreated);
             offSocket('board:updated', handleUpdated);
@@ -73,7 +70,6 @@ const Dashboard = () => {
             const { data } = await api.get('/boards');
             setBoards(data);
             setLoading(false);
-            // Join each board room to receive updates on dashboard
             data.forEach(b => joinBoard(b._id));
         } catch (error) {
             console.error(error);
@@ -119,13 +115,14 @@ const Dashboard = () => {
                 </div>
             </header>
 
-            {/* Main Content */}
+            {/* Main */}
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div className="mb-8">
                     <h2 className="text-xl font-semibold text-gray-800 mb-4">Your Boards</h2>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {/* Create New Board Card */}
+
+                        {/* Create Board */}
                         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                             <DialogTrigger asChild>
                                 <button className="h-32 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all flex items-center justify-center group">
@@ -139,6 +136,7 @@ const Dashboard = () => {
                                 <DialogHeader>
                                     <DialogTitle>Create New Board</DialogTitle>
                                 </DialogHeader>
+
                                 <form onSubmit={handleCreateBoard} className="space-y-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Board Title</label>
@@ -150,6 +148,7 @@ const Dashboard = () => {
                                             required
                                         />
                                     </div>
+
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Background Color</label>
                                         <div className="grid grid-cols-5 gap-2">
@@ -158,13 +157,15 @@ const Dashboard = () => {
                                                     key={color}
                                                     type="button"
                                                     onClick={() => setNewBoardBg(color)}
-                                                    className={`h-12 rounded-md transition-all ${newBoardBg === color ? 'ring-2 ring-offset-2 ring-blue-500' : ''
-                                                        }`}
+                                                    className={`h-12 rounded-md transition-all ${
+                                                        newBoardBg === color ? 'ring-2 ring-offset-2 ring-blue-500' : ''
+                                                    }`}
                                                     style={{ backgroundColor: color }}
                                                 />
                                             ))}
                                         </div>
                                     </div>
+
                                     <Button type="submit" className="w-full">Create Board</Button>
                                 </form>
                             </DialogContent>
@@ -177,6 +178,12 @@ const Dashboard = () => {
                                 onClick={() => navigate(`/board/${board._id}`)}
                                 className="h-32 rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105 flex items-center justify-center relative overflow-hidden group"
                                 style={{ backgroundColor: board.background }}
+                                onMouseEnter={(e) => {
+                                    const rect = e.target.getBoundingClientRect();
+                                    setHoverBoard(board);
+                                    setHoverPos({ x: rect.right + 10, y: rect.top });
+                                }}
+                                onMouseLeave={() => setHoverBoard(null)}
                             >
                                 <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-10 transition-opacity" />
                                 <h3 className="text-white font-semibold text-lg px-4 text-center relative z-10">
@@ -185,6 +192,33 @@ const Dashboard = () => {
                             </button>
                         ))}
                     </div>
+
+                    {/* Hover Preview Panel */}
+                    {hoverBoard && (
+                        <div
+                            className="fixed bg-white shadow-xl border border-gray-200 rounded-lg p-4 w-72 z-[99999]"
+                            style={{ top: hoverPos.y, left: hoverPos.x }}
+                        >
+                            <h3 className="font-semibold text-lg mb-2">{hoverBoard.title}</h3>
+
+                            <div className="space-y-2 text-sm text-gray-700">
+                                <p><strong>Lists:</strong> {hoverBoard.lists?.length ?? 0}</p>
+
+                                <p>
+                                    <strong>Tasks:</strong>{' '}
+                                    {hoverBoard.lists
+                                        ?.reduce((sum, list) => sum + list.cards.length, 0) ?? 0}
+                                </p>
+
+                                <p><strong>Members:</strong> {hoverBoard.members?.length ?? 1}</p>
+                            </div>
+
+                            <div
+                                className="h-8 w-full rounded mt-3 border"
+                                style={{ backgroundColor: hoverBoard.background }}
+                            />
+                        </div>
+                    )}
 
                     {boards.length === 0 && (
                         <div className="text-center py-12">

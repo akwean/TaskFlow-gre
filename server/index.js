@@ -21,17 +21,33 @@ app.use(express.json());
 // Trust Render/Proxy for correct protocol detection
 app.set('trust proxy', 1);
 
-// CORS: allow configured client origin(s)
+// CORS: allow configured client origin(s). In development also permit
+// common localhost variants (127.0.0.1) to avoid dev-origin mismatches.
 const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
 app.use(cors({
     origin: (origin, callback) => {
-        // allow same-origin and non-browser requests
-        if (!origin || allowedOrigins.includes(origin)) {
-            return callback(null, true);
+        // allow same-origin and non-browser requests (e.g. curl, server-to-server)
+        if (!origin) return callback(null, true);
+
+        // Allow explicit configured origins
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+
+        // In non-production, accept common localhost variants to avoid Vite/host mismatches
+        if (process.env.NODE_ENV !== 'production') {
+            try {
+                const url = new URL(origin);
+                const host = url.hostname;
+                if (host === 'localhost' || host === '127.0.0.1') {
+                    return callback(null, true);
+                }
+            } catch (e) {
+                // malformed origin - fall through to deny
+            }
         }
+
         return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
