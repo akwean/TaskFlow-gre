@@ -33,6 +33,9 @@ const CardItem = ({ card, isDragging = false, onClick }) => {
         0
     ) || 0;
 
+    const isNew =
+        Date.now() - new Date(card.createdAt).getTime() < 60 * 1000; // < 1 minute
+
     return (
         <div
             ref={setNodeRef}
@@ -42,10 +45,19 @@ const CardItem = ({ card, isDragging = false, onClick }) => {
             className={`${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         >
             <Card
-                className="p-3 bg-white shadow-sm hover:shadow-md transition-shadow"
+                className="p-3 bg-white shadow-sm hover:shadow-md transition-shadow relative"
                 onClick={handleClick}
             >
-                <p className="text-sm text-gray-800 mb-2 truncate" title={card.title}>{card.title}</p>
+                {/* NEW BADGE */}
+                {isNew && (
+                    <span className="absolute top-2 right-2 bg-blue-500/90 text-white text-xs px-2 py-[1px] rounded-full shadow">
+                        New
+                    </span>
+                )}
+
+                <p className="text-sm text-gray-800 mb-2 truncate" title={card.title}>
+                    {card.title}
+                </p>
 
                 {/* Labels */}
                 {card.labels && card.labels.length > 0 && (
