@@ -1,9 +1,9 @@
-import { createContext, useState, useEffect, useContext } from 'react';
-import axios from 'axios';
-import api from '@/lib/api';
+import { createContext, useState, useEffect, useContext } from "react";
+import api from "@/lib/api";
 
 const AuthContext = createContext();
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
@@ -12,7 +12,7 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         const checkUserLoggedIn = async () => {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem("token");
             if (token) {
                 try {
                     const config = {
@@ -20,10 +20,10 @@ export const AuthProvider = ({ children }) => {
                             Authorization: `Bearer ${token}`,
                         },
                     };
-                    const { data } = await api.get('/auth/me', config);
+                    const { data } = await api.get("/auth/me", config);
                     setUser(data);
-                } catch (error) {
-                    localStorage.removeItem('token');
+                } catch {
+                    localStorage.removeItem("token");
                     setUser(null);
                 }
             }
@@ -34,26 +34,32 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const login = async (email, password) => {
-        const { data } = await api.post('/auth/login', { email, password });
-        localStorage.setItem('token', data.token);
+        const { data } = await api.post("/auth/login", { email, password });
+        localStorage.setItem("token", data.token);
         setUser(data);
         return data;
     };
 
     const register = async (username, email, password) => {
-        const { data } = await api.post('/auth/register', { username, email, password });
-        localStorage.setItem('token', data.token);
+        const { data } = await api.post("/auth/register", {
+            username,
+            email,
+            password,
+        });
+        localStorage.setItem("token", data.token);
         setUser(data);
         return data;
     };
 
     const logout = () => {
-        localStorage.removeItem('token');
+        localStorage.removeItem("token");
         setUser(null);
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+        <AuthContext.Provider
+            value={{ user, login, register, logout, loading }}
+        >
             {children}
         </AuthContext.Provider>
     );

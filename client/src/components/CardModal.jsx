@@ -1,38 +1,55 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { getSocket } from '@/lib/realtime';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { X, Tag, Calendar, CheckSquare, Trash2, Plus } from 'lucide-react';
-import api from '@/lib/api';
+import { useState, useEffect, useCallback, useRef } from "react";
+import { getSocket } from "@/lib/realtime";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { X, Tag, Calendar, CheckSquare, Trash2, Plus } from "lucide-react";
+import api from "@/lib/api";
 
 const LABEL_COLORS = [
-    { name: 'Green', color: '#61bd4f' },
-    { name: 'Yellow', color: '#f2d600' },
-    { name: 'Orange', color: '#ff9f1a' },
-    { name: 'Red', color: '#eb5a46' },
-    { name: 'Purple', color: '#c377e0' },
-    { name: 'Blue', color: '#0079bf' },
-    { name: 'Sky', color: '#00c2e0' },
-    { name: 'Lime', color: '#51e898' },
-    { name: 'Pink', color: '#ff78cb' },
-    { name: 'Black', color: '#344563' },
+    { name: "Green", color: "#61bd4f" },
+    { name: "Yellow", color: "#f2d600" },
+    { name: "Orange", color: "#ff9f1a" },
+    { name: "Red", color: "#eb5a46" },
+    { name: "Purple", color: "#c377e0" },
+    { name: "Blue", color: "#0079bf" },
+    { name: "Sky", color: "#00c2e0" },
+    { name: "Lime", color: "#51e898" },
+    { name: "Pink", color: "#ff78cb" },
+    { name: "Black", color: "#344563" },
 ];
 
 const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [dueDate, setDueDate] = useState('');
-    const [labels, setLabels] = useState([]);
-    const [checklists, setChecklists] = useState([]);
+    const [title, setTitle] = useState(card?.title || "");
+    const [description, setDescription] = useState(card?.description || "");
+    const [dueDate, setDueDate] = useState(
+        card?.dueDate ? new Date(card.dueDate).toISOString().split("T")[0] : "",
+    );
+    const [labels, setLabels] = useState(card?.labels || []);
+    const [checklists, setChecklists] = useState(card?.checklists || []);
     const [showLabelPicker, setShowLabelPicker] = useState(false);
-    const [newChecklistTitle, setNewChecklistTitle] = useState('');
+    const [newChecklistTitle, setNewChecklistTitle] = useState("");
     const [showNewChecklist, setShowNewChecklist] = useState(false);
 
     const debounceTimeout = useRef(null);
-    const initialDataRef = useRef(null);
+    const initialDataRef = useRef({
+        title: card?.title || "",
+        description: card?.description || "",
+        dueDate: card?.dueDate
+            ? new Date(card.dueDate).toISOString().split("T")[0]
+            : "",
+        labels: card?.labels || [],
+        checklists: card?.checklists || [],
+    });
     const isMounted = useRef(true);
     const [isSaving, setIsSaving] = useState(false);
     const [lastSavedAt, setLastSavedAt] = useState(null);
@@ -45,8 +62,18 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
         if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
         debounceTimeout.current = setTimeout(async () => {
             if (!card || !card._id) return;
-            const currentSnapshot = { title, description, dueDate: dueDate || null, labels, checklists };
-            if (initialDataRef.current && JSON.stringify(initialDataRef.current) === JSON.stringify(currentSnapshot)) {
+            const currentSnapshot = {
+                title,
+                description,
+                dueDate: dueDate || null,
+                labels,
+                checklists,
+            };
+            if (
+                initialDataRef.current &&
+                JSON.stringify(initialDataRef.current) ===
+                    JSON.stringify(currentSnapshot)
+            ) {
                 // nothing changed, skip update
                 return;
             }
@@ -66,49 +93,39 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
                     onUpdate(data);
                     // update baseline
                     initialDataRef.current = {
-                        title: data.title || '',
-                        description: data.description || '',
-                        dueDate: data.dueDate ? new Date(data.dueDate).toISOString().split('T')[0] : '',
+                        title: data.title || "",
+                        description: data.description || "",
+                        dueDate: data.dueDate
+                            ? new Date(data.dueDate).toISOString().split("T")[0]
+                            : "",
                         labels: data.labels || [],
                         checklists: data.checklists || [],
                     };
                 }
             } catch (error) {
-                console.error('Error updating card:', error);
+                console.error("Error updating card:", error);
                 if (isMounted.current) setIsSaving(false);
             }
         }, 500);
-    }, [title, description, dueDate, labels, checklists, card?._id, onUpdate]);
+    }, [title, description, dueDate, labels, checklists, card, onUpdate]);
 
     useEffect(() => {
-        if (card) {
-            setTitle(card.title || '');
-            setDescription(card.description || '');
-            setDueDate(card.dueDate ? new Date(card.dueDate).toISOString().split('T')[0] : '');
-            setLabels(card.labels || []);
-            setChecklists(card.checklists || []);
-            initialDataRef.current = {
-                title: card.title || '',
-                description: card.description || '',
-                dueDate: card.dueDate ? new Date(card.dueDate).toISOString().split('T')[0] : '',
-                labels: card.labels || [],
-                checklists: card.checklists || []
-            };
-        }
-    }, [card]);
+        debouncedUpdate();
+    }, [debouncedUpdate]);
 
     useEffect(() => {
         isMounted.current = true;
         return () => {
             isMounted.current = false;
             if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
-            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+            if (typingTimeoutRef.current)
+                clearTimeout(typingTimeoutRef.current);
         };
     }, []);
 
     useEffect(() => {
         // Prevent auto-focus on the title input by shifting focus to a hidden div
-        const focusableElement = document.getElementById('focus-trap');
+        const focusableElement = document.getElementById("focus-trap");
         if (focusableElement) {
             focusableElement.focus();
         }
@@ -133,13 +150,23 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
             labels,
             checklists,
         };
-        if (initialDataRef.current && JSON.stringify(initialDataRef.current) === JSON.stringify(currentSnapshot)) {
+        if (
+            initialDataRef.current &&
+            JSON.stringify(initialDataRef.current) ===
+                JSON.stringify(currentSnapshot)
+        ) {
             // nothing changed, skip update
             return;
         }
         try {
             setIsSaving(true);
-            const updates = { title, description, dueDate: dueDate || null, labels, checklists };
+            const updates = {
+                title,
+                description,
+                dueDate: dueDate || null,
+                labels,
+                checklists,
+            };
             const { data } = await api.put(`/cards/${card._id}`, updates);
             if (isMounted.current) {
                 setIsSaving(false);
@@ -147,15 +174,17 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
                 onUpdate(data);
                 // update baseline
                 initialDataRef.current = {
-                    title: data.title || '',
-                    description: data.description || '',
-                    dueDate: data.dueDate ? new Date(data.dueDate).toISOString().split('T')[0] : '',
+                    title: data.title || "",
+                    description: data.description || "",
+                    dueDate: data.dueDate
+                        ? new Date(data.dueDate).toISOString().split("T")[0]
+                        : "",
                     labels: data.labels || [],
                     checklists: data.checklists || [],
                 };
             }
         } catch (error) {
-            console.error('Error flushing card update:', error);
+            console.error("Error flushing card update:", error);
             if (isMounted.current) setIsSaving(false);
         }
     };
@@ -172,16 +201,16 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
                 return next;
             });
         };
-        s.on('typing:card', onTyping);
+        s.on("typing:card", onTyping);
         return () => {
-            s.off('typing:card', onTyping);
+            s.off("typing:card", onTyping);
         };
     }, [card]);
 
     const emitTyping = (isTyping) => {
         if (!card || !boardId) return;
         const s = getSocket();
-        s.emit('typing:card', { boardId, cardId: card._id, isTyping });
+        s.emit("typing:card", { boardId, cardId: card._id, isTyping });
     };
 
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -195,24 +224,30 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
         } catch (error) {
             console.error(error);
         }
-    } 
+    };
 
     const addLabel = (labelColor) => {
-        const existingLabel = labels.find(l => l.color === labelColor.color);
+        const existingLabel = labels.find((l) => l.color === labelColor.color);
         if (!existingLabel) {
-            setLabels([...labels, { name: labelColor.name, color: labelColor.color }]);
+            setLabels([
+                ...labels,
+                { name: labelColor.name, color: labelColor.color },
+            ]);
         }
         setShowLabelPicker(false);
     };
 
     const removeLabel = (color) => {
-        setLabels(labels.filter(l => l.color !== color));
+        setLabels(labels.filter((l) => l.color !== color));
     };
 
     const addChecklist = () => {
         if (newChecklistTitle.trim()) {
-            setChecklists([...checklists, { title: newChecklistTitle, items: [] }]);
-            setNewChecklistTitle('');
+            setChecklists([
+                ...checklists,
+                { title: newChecklistTitle, items: [] },
+            ]);
+            setNewChecklistTitle("");
             setShowNewChecklist(false);
         }
     };
@@ -253,11 +288,14 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
 
     return (
         <Dialog open={isOpen} onOpenChange={handleDialogOpenChange}>
-            <div id="focus-trap" tabIndex="-1" className="hidden" /> {/* Hidden focus trap */}
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto"
+            <div id="focus-trap" tabIndex="-1" className="hidden" />{" "}
+            {/* Hidden focus trap */}
+            <DialogContent
+                className="max-w-3xl max-h-[90vh] overflow-y-auto"
                 onOpenAutoFocus={(event) => {
                     event.preventDefault(); // stops Radix from auto-focusing
-                    const descriptionElement = document.getElementById('description');
+                    const descriptionElement =
+                        document.getElementById("description");
                     if (descriptionElement) {
                         descriptionElement.focus(); // manually set focus to the description
                     }
@@ -293,7 +331,9 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
                             <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setShowLabelPicker(!showLabelPicker)}
+                                onClick={() =>
+                                    setShowLabelPicker(!showLabelPicker)
+                                }
                             >
                                 <Plus className="w-4 h-4 mr-1" />
                                 Add
@@ -308,7 +348,9 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
                                     style={{ backgroundColor: label.color }}
                                 >
                                     {label.name}
-                                    <button onClick={() => removeLabel(label.color)}>
+                                    <button
+                                        onClick={() => removeLabel(label.color)}
+                                    >
                                         <X className="w-3 h-3" />
                                     </button>
                                 </div>
@@ -322,7 +364,9 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
                                         key={labelColor.color}
                                         onClick={() => addLabel(labelColor)}
                                         className="h-8 rounded hover:opacity-80 transition-opacity"
-                                        style={{ backgroundColor: labelColor.color }}
+                                        style={{
+                                            backgroundColor: labelColor.color,
+                                        }}
                                         title={labelColor.name}
                                     />
                                 ))}
@@ -332,7 +376,10 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
 
                     {/* Due Date */}
                     <div>
-                        <Label htmlFor="due-date" className="flex items-center gap-2 mb-2">
+                        <Label
+                            htmlFor="due-date"
+                            className="flex items-center gap-2 mb-2"
+                        >
                             <Calendar className="w-4 h-4" />
                             Due Date
                         </Label>
@@ -351,7 +398,12 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
                         <div className="flex items-center gap-2 mb-2">
                             <Label htmlFor="description">Description</Label>
                             {descTypingUsers.size > 0 && (
-                                <span className="text-xs text-gray-500 italic">{descTypingUsers.size > 1 ? 'Multiple people' : 'Someone'} typing…</span>
+                                <span className="text-xs text-gray-500 italic">
+                                    {descTypingUsers.size > 1
+                                        ? "Multiple people"
+                                        : "Someone"}{" "}
+                                    typing…
+                                </span>
                             )}
                         </div>
                         <Textarea
@@ -362,8 +414,12 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
                             onChange={(e) => {
                                 setDescription(e.target.value);
                                 emitTyping(true);
-                                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-                                typingTimeoutRef.current = setTimeout(() => emitTyping(false), 800);
+                                if (typingTimeoutRef.current)
+                                    clearTimeout(typingTimeoutRef.current);
+                                typingTimeoutRef.current = setTimeout(
+                                    () => emitTyping(false),
+                                    800,
+                                );
                             }}
                             placeholder="Add a more detailed description..."
                             rows={4}
@@ -383,7 +439,9 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
                             <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setShowNewChecklist(!showNewChecklist)}
+                                onClick={() =>
+                                    setShowNewChecklist(!showNewChecklist)
+                                }
                             >
                                 <Plus className="w-4 h-4 mr-1" />
                                 Add Checklist
@@ -394,15 +452,25 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
                             <div className="flex gap-2 mb-4">
                                 <Input
                                     value={newChecklistTitle}
-                                    onChange={(e) => setNewChecklistTitle(e.target.value)}
+                                    onChange={(e) =>
+                                        setNewChecklistTitle(e.target.value)
+                                    }
                                     placeholder="Checklist title..."
-                                    onKeyPress={(e) => e.key === 'Enter' && addChecklist()}
+                                    onKeyPress={(e) =>
+                                        e.key === "Enter" && addChecklist()
+                                    }
                                     className="max-w-md"
                                     id="new-checklist-title"
                                     name="newChecklistTitle"
                                 />
-                                <Button onClick={addChecklist} size="sm">Add</Button>
-                                <Button onClick={() => setShowNewChecklist(false)} size="sm" variant="ghost">
+                                <Button onClick={addChecklist} size="sm">
+                                    Add
+                                </Button>
+                                <Button
+                                    onClick={() => setShowNewChecklist(false)}
+                                    size="sm"
+                                    variant="ghost"
+                                >
                                     Cancel
                                 </Button>
                             </div>
@@ -423,30 +491,51 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
 
                     {/* Actions */}
                     <div className="flex items-center justify-between pt-4 border-t">
-                        <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+                        <Button
+                            variant="destructive"
+                            onClick={() => setShowDeleteDialog(true)}
+                        >
                             <Trash2 className="w-4 h-4 mr-2" />
                             Delete Card
                         </Button>
-                                    {/* Delete Card Confirmation Dialog */}
-                                    <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-                                        <DialogContent>
-                                            <DialogHeader>
-                                                <DialogTitle>Delete Card</DialogTitle>
-                                                <DialogDescription>
-                                                    Are you sure you want to delete this card? This action cannot be undone.
-                                                </DialogDescription>
-                                            </DialogHeader>
-                                            <DialogFooter>
-                                                <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
-                                                    Cancel
-                                                </Button>
-                                                <Button variant="destructive" onClick={handleDelete}>
-                                                    Delete
-                                                </Button>
-                                            </DialogFooter>
-                                        </DialogContent>
-                                    </Dialog>
-                        <span className="text-sm text-gray-500">{isSaving ? 'Saving...' : lastSavedAt ? 'Saved' : ''}</span>
+                        {/* Delete Card Confirmation Dialog */}
+                        <Dialog
+                            open={showDeleteDialog}
+                            onOpenChange={setShowDeleteDialog}
+                        >
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Delete Card</DialogTitle>
+                                    <DialogDescription>
+                                        Are you sure you want to delete this
+                                        card? This action cannot be undone.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() =>
+                                            setShowDeleteDialog(false)
+                                        }
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        variant="destructive"
+                                        onClick={handleDelete}
+                                    >
+                                        Delete
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                        <span className="text-sm text-gray-500">
+                            {isSaving
+                                ? "Saving..."
+                                : lastSavedAt
+                                  ? "Saved"
+                                  : ""}
+                        </span>
                     </div>
                 </div>
             </DialogContent>
@@ -460,20 +549,22 @@ const ChecklistSection = ({
     onAddItem,
     onToggleItem,
     onDeleteItem,
-    onDeleteChecklist
+    onDeleteChecklist,
 }) => {
-    const [newItemText, setNewItemText] = useState('');
+    const [newItemText, setNewItemText] = useState("");
     const [showAddItem, setShowAddItem] = useState(false);
 
     const handleAddItem = () => {
         if (newItemText.trim()) {
             onAddItem(checklistIndex, newItemText);
-            setNewItemText('');
+            setNewItemText("");
             setShowAddItem(false);
         }
     };
 
-    const completedCount = checklist.items.filter(item => item.completed).length;
+    const completedCount = checklist.items.filter(
+        (item) => item.completed,
+    ).length;
     const totalCount = checklist.items.length;
     const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
@@ -494,7 +585,9 @@ const ChecklistSection = ({
                 <div className="mb-3">
                     <div className="flex justify-between text-xs text-gray-600 mb-1">
                         <span>{Math.round(progress)}%</span>
-                        <span>{completedCount}/{totalCount}</span>
+                        <span>
+                            {completedCount}/{totalCount}
+                        </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
@@ -507,18 +600,27 @@ const ChecklistSection = ({
 
             <div className="space-y-2">
                 {checklist.items.map((item, itemIdx) => (
-                    <div key={itemIdx} className="flex items-center gap-2 group">
+                    <div
+                        key={itemIdx}
+                        className="flex items-center gap-2 group"
+                    >
                         <input
                             type="checkbox"
                             checked={item.completed}
-                            onChange={() => onToggleItem(checklistIndex, itemIdx)}
+                            onChange={() =>
+                                onToggleItem(checklistIndex, itemIdx)
+                            }
                             className="w-4 h-4 rounded"
                         />
-                        <span className={`flex-1 ${item.completed ? 'line-through text-gray-500' : ''}`}>
+                        <span
+                            className={`flex-1 ${item.completed ? "line-through text-gray-500" : ""}`}
+                        >
                             {item.text}
                         </span>
                         <button
-                            onClick={() => onDeleteItem(checklistIndex, itemIdx)}
+                            onClick={() =>
+                                onDeleteItem(checklistIndex, itemIdx)
+                            }
                             className="opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                             <X className="w-4 h-4 text-gray-500 hover:text-red-500" />
@@ -533,14 +635,20 @@ const ChecklistSection = ({
                         value={newItemText}
                         onChange={(e) => setNewItemText(e.target.value)}
                         placeholder="Add an item..."
-                        onKeyPress={(e) => e.key === 'Enter' && handleAddItem()}
+                        onKeyPress={(e) => e.key === "Enter" && handleAddItem()}
                         autoFocus
                         className="max-w-xl"
                         id={`new-item-${checklistIndex}`}
                         name={`newItem-${checklistIndex}`}
                     />
-                    <Button onClick={handleAddItem} size="sm">Add</Button>
-                    <Button onClick={() => setShowAddItem(false)} size="sm" variant="ghost">
+                    <Button onClick={handleAddItem} size="sm">
+                        Add
+                    </Button>
+                    <Button
+                        onClick={() => setShowAddItem(false)}
+                        size="sm"
+                        variant="ghost"
+                    >
                         Cancel
                     </Button>
                 </div>
