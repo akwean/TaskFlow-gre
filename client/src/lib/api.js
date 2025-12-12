@@ -1,5 +1,5 @@
-import axios from 'axios';
-import { io } from 'socket.io-client';
+import axios from "axios";
+//import { io } from 'socket.io-client';
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -9,7 +9,7 @@ const api = axios.create({
 
 // Add token to requests
 api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -38,7 +38,7 @@ export function queuedPut(url, data) {
         if (online) {
             api.put(url, data).then(resolve).catch(reject);
         } else {
-            queue.push({ method: 'put', url, data, resolve, reject });
+            queue.push({ method: "put", url, data, resolve, reject });
         }
     });
 }
