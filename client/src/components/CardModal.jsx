@@ -62,6 +62,16 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
         if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
         debounceTimeout.current = setTimeout(async () => {
             if (!card || !card._id) return;
+
+            // Prevent sending an update with an empty title (server validation will reject)
+            if (!title || title.trim() === "") {
+                // Restore previous title from baseline to avoid submitting an empty title.
+                // This keeps the UI consistent while the user corrects the title.
+                const prevTitle = initialDataRef.current?.title || "";
+                if (title !== prevTitle) setTitle(prevTitle);
+                return;
+            }
+
             const currentSnapshot = {
                 title,
                 description,
@@ -113,6 +123,54 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
         debouncedUpdate();
     }, [debouncedUpdate]);
 
+    // Sync local state and baseline when the `card` prop changes.
+    // This is deferred to a microtask and only applies updates when values differ
+    // to avoid synchronous setState calls directly inside the effect body.
+    useEffect(() => {
+        Promise.resolve().then(() => {
+            if (!card) return;
+
+            const newTitle = card.title || "";
+            const newDescription = card.description || "";
+            const newDueDate = card.dueDate
+                ? new Date(card.dueDate).toISOString().split("T")[0]
+                : "";
+            const newLabels = card.labels || [];
+            const newChecklists = card.checklists || [];
+
+            const nextSnapshot = {
+                title: newTitle,
+                description: newDescription,
+                dueDate: newDueDate,
+                labels: newLabels,
+                checklists: newChecklists,
+            };
+
+            // If baseline matches, nothing to do
+            if (
+                initialDataRef.current &&
+                JSON.stringify(initialDataRef.current) ===
+                    JSON.stringify(nextSnapshot)
+            ) {
+                return;
+            }
+
+            // Update only fields that actually changed to minimize re-renders
+            if (title !== newTitle) setTitle(newTitle);
+            if (description !== newDescription) setDescription(newDescription);
+            if (dueDate !== newDueDate) setDueDate(newDueDate);
+            if (JSON.stringify(labels) !== JSON.stringify(newLabels))
+                setLabels(newLabels);
+            if (JSON.stringify(checklists) !== JSON.stringify(newChecklists))
+                setChecklists(newChecklists);
+
+            // Update baseline
+            initialDataRef.current = nextSnapshot;
+        });
+        // Intentionally not including local state vars in deps to avoid effect re-scheduling.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [card]);
+
     useEffect(() => {
         isMounted.current = true;
         return () => {
@@ -160,6 +218,16 @@ const CardModal = ({ card, isOpen, onClose, onUpdate, boardId }) => {
         }
         try {
             setIsSaving(true);
+
+            // Prevent sending an update with an empty title (server validation will reject)
+            if (!title || title.trim() === "") {
+                // Restore previous title from baseline to avoid submitting an empty title.
+                const prevTitle = initialDataRef.current?.title || "";
+                if (title !== prevTitle) setTitle(prevTitle);
+                if (isMounted.current) setIsSaving(false);
+                return;
+            }
+
             const updates = {
                 title,
                 description,
