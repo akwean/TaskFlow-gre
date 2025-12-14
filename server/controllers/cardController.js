@@ -1,6 +1,6 @@
-const Card = require('../models/Card');
-const List = require('../models/List');
-const { emitToBoard } = require('../realtime/socket');
+const Card = require("../models/Card");
+const List = require("../models/List");
+const { emitToBoard } = require("../realtime/socket");
 
 // @desc    Get all cards for a list
 // @route   GET /api/lists/:listId/cards
@@ -8,13 +8,13 @@ const { emitToBoard } = require('../realtime/socket');
 const getCards = async (req, res) => {
     try {
         const cards = await Card.find({ list: req.params.listId })
-            .sort('order')
-            .populate('members', 'username email avatar')
+            .sort("order")
+            .populate("members", "username email avatar")
             .lean();
         res.json(cards);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Server Error' });
+        res.status(500).json({ message: "Server Error" });
     }
 };
 
@@ -26,7 +26,9 @@ const createCard = async (req, res) => {
 
     try {
         // Get the highest order number
-        const lastCard = await Card.findOne({ list: req.params.listId }).sort('-order');
+        const lastCard = await Card.findOne({ list: req.params.listId }).sort(
+            "-order",
+        );
         const order = lastCard ? lastCard.order + 1 : 0;
 
         const card = await Card.create({
@@ -38,21 +40,21 @@ const createCard = async (req, res) => {
         const list = await List.findById(req.params.listId);
 
         if (list) {
-            emitToBoard(list.board.toString(), 'card:created', {
+            emitToBoard(list.board.toString(), "card:created", {
                 card,
                 user: req.user && {
                     id: req.user._id,
                     username: req.user.username,
                     email: req.user.email,
-                    avatar: req.user.avatar
-                }
+                    avatar: req.user.avatar,
+                },
             });
         }
 
         res.status(201).json(card);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Server Error' });
+        res.status(500).json({ message: "Server Error" });
     }
 };
 
@@ -60,73 +62,122 @@ const createCard = async (req, res) => {
 // @route   PUT /api/cards/:id
 // @access  Private
 const updateCard = async (req, res) => {
-    const { title, description, list, order, labels, members, dueDate, checklists } = req.body;
+    const {
+        title,
+        description,
+        list,
+        order,
+        labels,
+        members,
+        dueDate,
+        checklists,
+    } = req.body;
+
+    // Only log if checklists is missing or malformed
+    if (
+        req.body.checklists !== undefined &&
+        !Array.isArray(req.body.checklists)
+    ) {
+        console.warn(
+            "Malformed checklists payload:",
+            req.body.checklists,
+            "Full payload:",
+            req.body,
+        );
+    }
 
     try {
+        // Find the card first to get old list/order for reordering logic
         const card = await Card.findById(req.params.id);
-
         if (!card) {
-            return res.status(404).json({ message: 'Card not found' });
+            return res.status(404).json({ message: "Card not found" });
         }
 
         const oldListId = card.list?.toString();
         const newListId = list !== undefined ? list.toString() : oldListId;
         const orderChanged = order !== undefined || list !== undefined;
 
-        // Simple field updates
-        if (title !== undefined) card.title = title;
-        if (description !== undefined) card.description = description;
-        if (labels !== undefined) card.labels = labels;
-        if (members !== undefined) card.members = members;
-        if (dueDate !== undefined) card.dueDate = dueDate;
-        if (checklists !== undefined) card.checklists = checklists;
+        let updatedFields = {};
+        if (title !== undefined) updatedFields.title = title;
+        if (description !== undefined) updatedFields.description = description;
+        if (labels !== undefined) updatedFields.labels = labels;
+        if (members !== undefined) updatedFields.members = members;
+        if (dueDate !== undefined) updatedFields.dueDate = dueDate;
+        if (checklists !== undefined) updatedFields.checklists = checklists;
 
         // Handle list/order changes with full reordering
         if (orderChanged) {
             const movingBetweenLists = oldListId !== newListId;
-            
-            if (movingBetweenLists) {
-                // Moving to different list: remove from old, insert into new
-                // 1. Remove from old list (shift down remaining cards)
-                const oldListCards = await Card.find({ list: oldListId, _id: { $ne: card._id } }).sort('order');
-                await Promise.all(oldListCards.map((c, i) => Card.findByIdAndUpdate(c._id, { order: i })));
 
-                // 2. Insert into new list at specified position
-                card.list = newListId;
-                const newListCards = await Card.find({ list: newListId }).sort('order');
-                const targetIndex = order !== undefined ? Math.min(order, newListCards.length) : newListCards.length;
-                
+            if (movingBetweenLists) {
+                // Remove from old list (shift down remaining cards)
+                const oldListCards = await Card.find({
+                    list: oldListId,
+                    _id: { $ne: card._id },
+                }).sort("order");
+                await Promise.all(
+                    oldListCards.map((c, i) =>
+                        Card.findByIdAndUpdate(c._id, { order: i }),
+                    ),
+                );
+
+                // Insert into new list at specified position
+                updatedFields.list = newListId;
+                const newListCards = await Card.find({ list: newListId }).sort(
+                    "order",
+                );
+                const targetIndex =
+                    order !== undefined
+                        ? Math.min(order, newListCards.length)
+                        : newListCards.length;
+
                 // Shift cards at/after insertion point
-                await Promise.all(newListCards.map((c, i) => {
-                    if (i >= targetIndex) {
-                        return Card.findByIdAndUpdate(c._id, { order: i + 1 });
-                    }
-                    return Promise.resolve();
-                }));
-                
-                card.order = targetIndex;
+                await Promise.all(
+                    newListCards.map((c, i) => {
+                        if (i >= targetIndex) {
+                            return Card.findByIdAndUpdate(c._id, {
+                                order: i + 1,
+                            });
+                        }
+                        return Promise.resolve();
+                    }),
+                );
+
+                updatedFields.order = targetIndex;
             } else {
                 // Reordering within same list
-                const listCards = await Card.find({ list: oldListId, _id: { $ne: card._id } }).sort('order');
-                const targetIndex = order !== undefined ? Math.min(order, listCards.length) : listCards.length;
-                
+                const listCards = await Card.find({
+                    list: oldListId,
+                    _id: { $ne: card._id },
+                }).sort("order");
+                const targetIndex =
+                    order !== undefined
+                        ? Math.min(order, listCards.length)
+                        : listCards.length;
+
                 // Renumber all cards to make room at targetIndex
-                await Promise.all(listCards.map((c, i) => {
-                    if (i >= targetIndex) {
-                        return Card.findByIdAndUpdate(c._id, { order: i + 1 });
-                    } else {
-                        return Card.findByIdAndUpdate(c._id, { order: i });
-                    }
-                }));
-                
-                card.order = targetIndex;
+                await Promise.all(
+                    listCards.map((c, i) => {
+                        if (i >= targetIndex) {
+                            return Card.findByIdAndUpdate(c._id, {
+                                order: i + 1,
+                            });
+                        } else {
+                            return Card.findByIdAndUpdate(c._id, { order: i });
+                        }
+                    }),
+                );
+
+                updatedFields.order = targetIndex;
             }
         }
 
-        await card.save();
-
-        const updatedCard = await Card.findById(card._id)
-            .populate('members', 'username email avatar');
+        // Atomic update to avoid VersionError
+        const updatedCard = await Card.findByIdAndUpdate(
+            req.params.id,
+            { $set: updatedFields },
+            { new: true, runValidators: true },
+        ).populate("members", "username email avatar");
 
         // Realtime: broadcast update (including potential move across lists)
         let boardId = null;
@@ -134,9 +185,9 @@ const updateCard = async (req, res) => {
             const targetList = await List.findById(updatedCard.list);
             if (targetList) boardId = targetList.board.toString();
         } catch {}
-        
+
         if (boardId) {
-            emitToBoard(boardId, 'card:updated', {
+            emitToBoard(boardId, "card:updated", {
                 card: updatedCard,
                 oldListId,
                 newListId: updatedCard.list?.toString(),
@@ -144,8 +195,8 @@ const updateCard = async (req, res) => {
                     id: req.user._id,
                     username: req.user.username,
                     email: req.user.email,
-                    avatar: req.user.avatar
-                }
+                    avatar: req.user.avatar,
+                },
             });
 
             // If order or list changed, broadcast authoritative snapshots
@@ -153,29 +204,41 @@ const updateCard = async (req, res) => {
                 try {
                     const targetListId = updatedCard.list?.toString();
                     if (targetListId) {
-                        const targetCards = await Card.find({ list: targetListId })
-                            .sort('order')
-                            .populate('members', 'username email avatar')
+                        const targetCards = await Card.find({
+                            list: targetListId,
+                        })
+                            .sort("order")
+                            .populate("members", "username email avatar")
                             .lean();
-                        emitToBoard(boardId, 'cards:reordered', { listId: targetListId, cards: targetCards });
+                        emitToBoard(boardId, "cards:reordered", {
+                            listId: targetListId,
+                            cards: targetCards,
+                        });
                     }
                     if (oldListId && oldListId !== targetListId) {
                         const sourceCards = await Card.find({ list: oldListId })
-                            .sort('order')
-                            .populate('members', 'username email avatar')
+                            .sort("order")
+                            .populate("members", "username email avatar")
                             .lean();
-                        emitToBoard(boardId, 'cards:reordered', { listId: oldListId, cards: sourceCards });
+                        emitToBoard(boardId, "cards:reordered", {
+                            listId: oldListId,
+                            cards: sourceCards,
+                        });
                     }
                 } catch (e) {
-                    console.error('Failed to emit cards:reordered snapshot:', e);
+                    console.error(
+                        "Failed to emit cards:reordered snapshot:",
+                        e,
+                    );
                 }
             }
         }
 
         res.json(updatedCard);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Server Error' });
+        // Log the error with full details for debugging
+        console.error("UpdateCard error:", error, "Payload was:", req.body);
+        res.status(500).json({ message: "Server Error" });
     }
 };
 
@@ -187,7 +250,7 @@ const deleteCard = async (req, res) => {
         const card = await Card.findById(req.params.id);
 
         if (!card) {
-            return res.status(404).json({ message: 'Card not found' });
+            return res.status(404).json({ message: "Card not found" });
         }
 
         const list = await List.findById(card.list);
@@ -196,22 +259,22 @@ const deleteCard = async (req, res) => {
         // Realtime: notify board listeners
 
         if (list) {
-            emitToBoard(list.board.toString(), 'card:deleted', {
+            emitToBoard(list.board.toString(), "card:deleted", {
                 cardId: card._id,
                 listId: card.list?.toString(),
                 user: req.user && {
                     id: req.user._id,
                     username: req.user.username,
                     email: req.user.email,
-                    avatar: req.user.avatar
-                }
+                    avatar: req.user.avatar,
+                },
             });
         }
 
-        res.json({ message: 'Card removed' });
+        res.json({ message: "Card removed" });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Server Error' });
+        res.status(500).json({ message: "Server Error" });
     }
 };
 

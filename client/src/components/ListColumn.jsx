@@ -8,9 +8,17 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, MoreVertical, GripVertical } from "lucide-react";
+import { Plus, MoreVertical, GripVertical, Trash2 } from "lucide-react";
 import CardItem from "./CardItem";
 import MoveModal from "./MoveModal";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from "@/components/ui/dialog";
 
 const ListColumn = ({
     list,
@@ -31,6 +39,9 @@ const ListColumn = ({
     const [editingTitle, setEditingTitle] = useState(list.title);
     const menuRef = useRef(null);
     const hoveredRef = useRef(false);
+
+    // Delete dialog state
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
     // Move modal state
     const [showMoveModal, setShowMoveModal] = useState(false);
@@ -202,7 +213,7 @@ const ListColumn = ({
                                 </button>
                                 <button
                                     onClick={() => {
-                                        onDeleteList(list._id);
+                                        setShowDeleteDialog(true);
                                         setShowMenu(false);
                                     }}
                                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 text-red-600"
@@ -213,6 +224,43 @@ const ListColumn = ({
                         )}
                     </div>
                 </div>
+
+                {/* Delete List Confirmation Dialog */}
+                <Dialog
+                    open={showDeleteDialog}
+                    onOpenChange={setShowDeleteDialog}
+                >
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Delete List</DialogTitle>
+                            <DialogDescription>
+                                Are you sure you want to delete this list? All
+                                cards in this list will also be deleted. This
+                                action cannot be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                onClick={() => setShowDeleteDialog(false)}
+                                size="sm"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={() => {
+                                    onDeleteList(list._id);
+                                    setShowDeleteDialog(false);
+                                }}
+                                size="sm"
+                            >
+                                <Trash2 className="w-3 h-3 mr-1" />
+                                Delete
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 <div
                     ref={setDroppableRef}
