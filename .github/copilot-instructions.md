@@ -1,3 +1,48 @@
+# Copilot Instructions — TaskFlow (concise)
+
+TaskFlow is a full-stack real-time Kanban app: React (Vite) frontend + Node/Express backend + MongoDB + Socket.IO for realtime. This file captures the minimal, actionable knowledge an AI coding agent needs to be productive here.
+
+Quick run
+- Backend dev: `cd server && npm install && npm run dev` (nodemon, port 5000)
+- Frontend dev: `cd client && npm install && npm run dev` (Vite, port 5173)
+- Env: `server/.env` must include `MONGO_URI`, `JWT_SECRET`, `PORT`, `CLIENT_ORIGIN`. Frontend uses `VITE_API_BASE_URL`.
+
+Architecture & data flow (short)
+- REST API for CRUD: frontend calls `client/src/lib/api.js` (axios + token interceptor). Example: `api.post('/api/lists/:listId/cards', data)`.
+- Realtime: `server/realtime/socket.js` (server) and `client/src/lib/realtime.js` (client) use Socket.IO. Controllers emit via `emitToBoard(boardId, event, payload)` after DB changes.
+- Auth: JWT stored in `localStorage` and added to requests by `api.js`. Socket auth uses `socket.handshake.auth.token` and is verified server-side in `socket.js`.
+
+Project-specific conventions
+- Dual-channel sync: controllers always emit socket events after successful DB writes. Search for `emitToBoard` in `server/controllers/*` when adding mutations.
+- Rooms: `board:${boardId}` for board-scoped events, `user:${userId}` for user-targeted messages. Presence is in `socket.js` (see `emitPresence`).
+- Offline/robust updates: `client/src/lib/api.js` implements `queuedPut(url, data)` for drag-and-drop position updates — use it for position mutations when resiliency matters.
+- Auth checks: controllers expect owner or member access; follow pattern used in `server/realtime/socket.js` when validating board joins.
+- Path aliases: `@/` → `client/src/` (configured in `jsconfig.json` / `vite.config.js`) — prefer `@/components/...` and `@/lib/...` imports.
+
+Testing & mocks
+- Frontend: Vitest (`cd client && npm test`). Tests mock `@/lib/api` and `@/context/AuthContext` (see `client/src/__tests__/dashboard.test.jsx`).
+
+Files to inspect for common changes
+- Add a realtime feature: update `server/models/*`, `server/controllers/*`, `server/routes/*`, then call `emitToBoard` in the controller. Update client listeners in `BoardView.jsx` or the relevant page.
+- API surface: `server/index.js` (routes registration) and controllers under `server/controllers/`.
+- Socket behaviour: `server/realtime/socket.js` — editing this requires manual multi-tab testing for presence/cursor behaviors.
+
+Safety & editing safeguards (do not change without verification)
+- Do not rename Mongoose ref strings (e.g., `ref: 'Model'`) — breaks `.populate()` calls.
+- Do not remove `protect`/auth middleware on private routes.
+- Avoid removing socket event emission patterns — missing emits break cross-client sync.
+- Changes to socket handlers need manual browser tests (multiple tabs) to verify presence, cursor, and typing indicators.
+
+Examples (copy when needed)
+- Emit after DB save (controller):
+  const { emitToBoard } = require('../realtime/socket');
+  emitToBoard(boardId, 'card:created', { card });
+- Client socket initialization (use `getSocket()`): see `client/src/lib/realtime.js`.
+
+When uncertain
+- Propose changes in a short comment and request manual acceptance before large refactors (especially to `socket.js`, auth middleware, or Mongoose refs).
+
+If you want, I can expand this into a longer guide preserving old content or add short snippets for common edits (controllers, new model, or client listeners). Please tell me which sections need more detail.
 # Copilot Instructions for TaskFlow
 
 TaskFlow is a full-stack real-time Kanban board with React 19, Vite, Node.js/Express, MongoDB, and Socket.IO. This guide helps AI agents understand non-obvious patterns and architectural decisions.
