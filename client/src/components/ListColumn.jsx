@@ -31,6 +31,9 @@ const ListColumn = ({
     listPresenceCount = 0,
     allLists = [],
     onMoveList, // (listId, destListId, destPosition) => void
+    onDeleteCard,
+    onMoveCard,
+    allCards = {},
 }) => {
     const [newCardTitle, setNewCardTitle] = useState("");
     const [isAddingCard, setIsAddingCard] = useState(false);
@@ -280,6 +283,10 @@ const ListColumn = ({
                                 key={card._id}
                                 card={card}
                                 onClick={onCardClick}
+                                onDelete={onDeleteCard}
+                                onMove={onMoveCard}
+                                allLists={allLists}
+                                allCards={allCards}
                             />
                         ))}
                     </SortableContext>

@@ -813,6 +813,25 @@ const BoardView = () => {
         }
     };
 
+    const handleMoveCard = async (cardId, destListId, destPosition) => {
+        try {
+            await api.put(`/cards/${cardId}`, {
+                list: destListId,
+                order: destPosition,
+            });
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleCardDelete = async (cardId) => {
+        try {
+            await api.delete(`/cards/${cardId}`);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     const handleUpdateList = async (listId, title) => {
         try {
             const { data } = await api.put(`/lists/${listId}`, { title });
@@ -1163,6 +1182,9 @@ const BoardView = () => {
                                                 listPresence[list._id] || 0
                                             }
                                             allLists={lists}
+                                            onDeleteCard={handleCardDelete}
+                                            onMoveCard={handleMoveCard}
+                                            allCards={cards}
                                             onMoveList={async (
                                                 listId,
                                                 newPosition,
