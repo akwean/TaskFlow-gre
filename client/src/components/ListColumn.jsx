@@ -1,21 +1,61 @@
-import { useState, useEffect, useRef } from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { useDroppable } from '@dnd-kit/core';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Plus, MoreVertical, GripVertical } from 'lucide-react';
-import CardItem from './CardItem';
+import { useState, useEffect, useRef } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+    SortableContext,
+    verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { useDroppable } from "@dnd-kit/core";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Plus, MoreVertical, GripVertical, Trash2 } from "lucide-react";
+import CardItem from "./CardItem";
+import MoveModal from "./MoveModal";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from "@/components/ui/dialog";
 
-const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDeleteList, onListFocus, listPresenceCount = 0 }) => {
-    const [newCardTitle, setNewCardTitle] = useState('');
+const ListColumn = ({
+    list,
+    cards,
+    onCreateCard,
+    onCardClick,
+    onUpdateList,
+    onDeleteList,
+    onListFocus,
+    listPresenceCount = 0,
+    allLists = [],
+    onMoveList, // (listId, destListId, destPosition) => void
+    onDeleteCard,
+    onMoveCard,
+    allCards = {},
+}) => {
+    const [newCardTitle, setNewCardTitle] = useState("");
     const [isAddingCard, setIsAddingCard] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editingTitle, setEditingTitle] = useState(list.title);
     const menuRef = useRef(null);
     const hoveredRef = useRef(false);
+
+    // Delete dialog state
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+    // Move modal state
+    const [showMoveModal, setShowMoveModal] = useState(false);
+    const currentPosition = allLists.findIndex((l) => l._id === list._id) + 1;
+    const [movePosition, setMovePosition] = useState(currentPosition);
+
+    // Prepare positions for MoveModal (1-based positions for all lists)
+    const movePositions = Array.from(
+        { length: allLists.length },
+        (_, i) => i + 1,
+    );
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -25,16 +65,20 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
         };
 
         if (showMenu) {
-            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener("mousedown", handleClickOutside);
         }
 
         return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener("mousedown", handleClickOutside);
         };
     }, [showMenu]);
 
-    const { setNodeRef: setDroppableRef } = useDroppable({ id: list._id });
-    const { setNodeRef: setEndRef, isOver: isOverEnd } = useDroppable({ id: `${list._id}__end` });
+    const { setNodeRef: setDroppableRef, isOver: isOverList } = useDroppable({
+        id: list._id,
+    });
+    const { setNodeRef: setEndRef, isOver: isOverEnd } = useDroppable({
+        id: `${list._id}__end`,
+    });
 
     // Make the entire list sortable (drag to reorder lists)
     const {
@@ -55,7 +99,7 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
         if (!newCardTitle.trim()) return;
 
         await onCreateCard(list._id, newCardTitle);
-        setNewCardTitle('');
+        setNewCardTitle("");
         setIsAddingCard(false);
     };
 
@@ -76,9 +120,23 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
     };
 
     return (
-           <div ref={setSortableRef} style={style} className={`flex-shrink-0 w-64 sm:w-72 ${isDragging ? 'opacity-90' : ''}`}
-               onMouseEnter={() => { if (!hoveredRef.current) { hoveredRef.current = true; onListFocus?.(list._id, true); } }}
-               onMouseLeave={() => { if (hoveredRef.current) { hoveredRef.current = false; onListFocus?.(list._id, false); } }}>
+        <div
+            ref={setSortableRef}
+            style={style}
+            className={`flex-shrink-0 w-64 sm:w-72 transition-transform duration-150 ${isDragging ? "opacity-70 scale-105" : ""}`}
+            onMouseEnter={() => {
+                if (!hoveredRef.current) {
+                    hoveredRef.current = true;
+                    onListFocus?.(list._id, true);
+                }
+            }}
+            onMouseLeave={() => {
+                if (hoveredRef.current) {
+                    hoveredRef.current = false;
+                    onListFocus?.(list._id, false);
+                }
+            }}
+        >
             <div className="bg-gray-100 rounded-lg p-2 sm:p-3 max-h-[calc(100vh-140px)] flex flex-col">
                 <div className="flex items-center justify-between mb-3 px-2">
                     {isEditingTitle ? (
@@ -87,8 +145,8 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
                             onChange={(e) => setEditingTitle(e.target.value)}
                             onBlur={handleSaveTitle}
                             onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveTitle();
-                                if (e.key === 'Escape') {
+                                if (e.key === "Enter") handleSaveTitle();
+                                if (e.key === "Escape") {
                                     setEditingTitle(list.title);
                                     setIsEditingTitle(false);
                                 }
@@ -106,7 +164,12 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
                             >
                                 <GripVertical className="w-4 h-4" />
                             </button>
-                            <span className="cursor-pointer" onClick={() => setIsEditingTitle(true)}>{list.title}</span>
+                            <span
+                                className="cursor-pointer"
+                                onClick={() => setIsEditingTitle(true)}
+                            >
+                                {list.title}
+                            </span>
                         </h3>
                     )}
                     <div className="relative flex items-center gap-2">
@@ -124,7 +187,10 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
                             <MoreVertical className="w-4 h-4" />
                         </Button>
                         {showMenu && (
-                            <div ref={menuRef} className="absolute right-0 top-6 bg-white border border-gray-200 rounded-md shadow-lg z-10 w-32">
+                            <div
+                                ref={menuRef}
+                                className="absolute right-0 top-6 bg-white border border-gray-200 rounded-md shadow-lg z-10 w-32"
+                            >
                                 <button
                                     onClick={() => {
                                         setIsEditingTitle(true);
@@ -136,7 +202,21 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
                                 </button>
                                 <button
                                     onClick={() => {
-                                        onDeleteList(list._id);
+                                        setShowMoveModal(true);
+                                        setShowMenu(false);
+                                        setMovePosition(
+                                            allLists.findIndex(
+                                                (l) => l._id === list._id,
+                                            ) + 1,
+                                        );
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                                >
+                                    Move
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowDeleteDialog(true);
                                         setShowMenu(false);
                                     }}
                                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 text-red-600"
@@ -148,16 +228,73 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
                     </div>
                 </div>
 
-                <div ref={setDroppableRef} className="flex-1 overflow-y-auto space-y-2 mb-2">
-                    <SortableContext items={cards.map(c => c._id)} strategy={verticalListSortingStrategy}>
+                {/* Delete List Confirmation Dialog */}
+                <Dialog
+                    open={showDeleteDialog}
+                    onOpenChange={setShowDeleteDialog}
+                >
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Delete List</DialogTitle>
+                            <DialogDescription>
+                                Are you sure you want to delete this list? All
+                                cards in this list will also be deleted. This
+                                action cannot be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                onClick={() => setShowDeleteDialog(false)}
+                                size="sm"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={() => {
+                                    onDeleteList(list._id);
+                                    setShowDeleteDialog(false);
+                                }}
+                                size="sm"
+                            >
+                                <Trash2 className="w-3 h-3 mr-1" />
+                                Delete
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                <div
+                    ref={setDroppableRef}
+                    className={`flex-1 overflow-y-auto space-y-2 mb-2 relative transition-colors duration-150 ${isOverList ? "ring-2 ring-blue-400 bg-blue-50/40 rounded-md" : ""}`}
+                >
+                    {/* Subtle highlight overlay when dragging over this list */}
+                    {isOverList && (
+                        <div className="absolute inset-0 pointer-events-none rounded-md bg-blue-50/60"></div>
+                    )}
+
+                    <SortableContext
+                        items={cards.map((c) => c._id)}
+                        strategy={verticalListSortingStrategy}
+                    >
                         {cards.map((card) => (
-                            <CardItem key={card._id} card={card} onClick={onCardClick} />
+                            <CardItem
+                                key={card._id}
+                                card={card}
+                                onClick={onCardClick}
+                                onDelete={onDeleteCard}
+                                onMove={onMoveCard}
+                                allLists={allLists}
+                                allCards={allCards}
+                            />
                         ))}
                     </SortableContext>
+
                     {/* Bottom drop target to allow placing at the end explicitly */}
                     <div
                         ref={setEndRef}
-                        className={`h-8 mt-1 rounded-md border border-dashed ${isOverEnd ? 'border-blue-400 bg-blue-50' : 'border-transparent'}`}
+                        className={`h-8 mt-1 rounded-md ${isOverEnd ? "border-2 border-dashed border-blue-500 bg-blue-50 shadow-inner" : "border border-dashed border-transparent"}`}
                     />
                 </div>
 
@@ -172,8 +309,15 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
                             className="text-sm"
                         />
                         <div className="flex space-x-2">
-                            <Button type="submit" size="sm" className="flex-1">Add</Button>
-                            <Button type="button" size="sm" variant="ghost" onClick={() => setIsAddingCard(false)}>
+                            <Button type="submit" size="sm" className="flex-1">
+                                Add
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setIsAddingCard(false)}
+                            >
                                 Cancel
                             </Button>
                         </div>
@@ -190,6 +334,23 @@ const ListColumn = ({ list, cards, onCreateCard, onCardClick, onUpdateList, onDe
                     </Button>
                 )}
             </div>
+            {/* MoveModal for List */}
+            {showMoveModal && (
+                <MoveModal
+                    positions={movePositions}
+                    selectedPosition={movePosition}
+                    currentPosition={currentPosition}
+                    onPositionChange={setMovePosition}
+                    onMove={() => {
+                        setShowMoveModal(false);
+                        if (onMoveList) {
+                            onMoveList(list._id, movePosition);
+                        }
+                    }}
+                    onClose={() => setShowMoveModal(false)}
+                    title="Move list"
+                />
+            )}
         </div>
     );
 };
