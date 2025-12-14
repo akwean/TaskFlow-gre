@@ -1162,6 +1162,71 @@ const BoardView = () => {
                                             listPresenceCount={
                                                 listPresence[list._id] || 0
                                             }
+                                            allLists={lists}
+                                            onMoveList={async (
+                                                listId,
+                                                newPosition,
+                                            ) => {
+                                                console.log(
+                                                    "[BoardView] onMoveList called",
+                                                    {
+                                                        listId,
+                                                        newPosition,
+                                                        lists,
+                                                    },
+                                                );
+                                                // Move list logic: reorder lists array
+                                                const fromIdx = lists.findIndex(
+                                                    (l) => l._id === listId,
+                                                );
+                                                if (
+                                                    fromIdx === -1 ||
+                                                    newPosition < 1 ||
+                                                    newPosition > lists.length
+                                                )
+                                                    return;
+                                                let newLists = [...lists];
+                                                const [moved] = newLists.splice(
+                                                    fromIdx,
+                                                    1,
+                                                );
+                                                // Insert at new position (newPosition is 1-based)
+                                                newLists.splice(
+                                                    newPosition - 1,
+                                                    0,
+                                                    moved,
+                                                );
+                                                setLists(newLists);
+                                                // Persist to backend
+                                                try {
+                                                    const payload = {
+                                                        order: newLists.map(
+                                                            (l, i) => ({
+                                                                id: l._id,
+                                                                order: i,
+                                                            }),
+                                                        ),
+                                                    };
+                                                    await api.post(
+                                                        `/boards/${id}/lists/reorder`,
+                                                        payload,
+                                                    );
+                                                    console.log(
+                                                        "✅ List reorder saved to server",
+                                                    );
+                                                } catch (e) {
+                                                    console.error(
+                                                        "❌ List reorder failed:",
+                                                        e,
+                                                    );
+                                                    fetchBoardData();
+                                                    add(
+                                                        "List reorder failed. Restoring.",
+                                                        "error",
+                                                    );
+                                                }
+                                                // await api.put('/lists/reorder', { order: newLists.map(l => l._id) });
+                                            }}
                                         />
                                     ))}
                                 </SortableContext>

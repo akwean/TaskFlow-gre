@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, MoreVertical, GripVertical } from "lucide-react";
 import CardItem from "./CardItem";
+import MoveModal from "./MoveModal";
 
 const ListColumn = ({
     list,
@@ -20,6 +21,8 @@ const ListColumn = ({
     onDeleteList,
     onListFocus,
     listPresenceCount = 0,
+    allLists = [],
+    onMoveList, // (listId, destListId, destPosition) => void
 }) => {
     const [newCardTitle, setNewCardTitle] = useState("");
     const [isAddingCard, setIsAddingCard] = useState(false);
@@ -28,6 +31,17 @@ const ListColumn = ({
     const [editingTitle, setEditingTitle] = useState(list.title);
     const menuRef = useRef(null);
     const hoveredRef = useRef(false);
+
+    // Move modal state
+    const [showMoveModal, setShowMoveModal] = useState(false);
+    const currentPosition = allLists.findIndex((l) => l._id === list._id) + 1;
+    const [movePosition, setMovePosition] = useState(currentPosition);
+
+    // Prepare positions for MoveModal (1-based positions for all lists)
+    const movePositions = Array.from(
+        { length: allLists.length },
+        (_, i) => i + 1,
+    );
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -174,6 +188,20 @@ const ListColumn = ({
                                 </button>
                                 <button
                                     onClick={() => {
+                                        setShowMoveModal(true);
+                                        setShowMenu(false);
+                                        setMovePosition(
+                                            allLists.findIndex(
+                                                (l) => l._id === list._id,
+                                            ) + 1,
+                                        );
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                                >
+                                    Move
+                                </button>
+                                <button
+                                    onClick={() => {
                                         onDeleteList(list._id);
                                         setShowMenu(false);
                                     }}
@@ -251,6 +279,23 @@ const ListColumn = ({
                     </Button>
                 )}
             </div>
+            {/* MoveModal for List */}
+            {showMoveModal && (
+                <MoveModal
+                    positions={movePositions}
+                    selectedPosition={movePosition}
+                    currentPosition={currentPosition}
+                    onPositionChange={setMovePosition}
+                    onMove={() => {
+                        setShowMoveModal(false);
+                        if (onMoveList) {
+                            onMoveList(list._id, movePosition);
+                        }
+                    }}
+                    onClose={() => setShowMoveModal(false)}
+                    title="Move list"
+                />
+            )}
         </div>
     );
 };
