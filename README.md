@@ -1,8 +1,27 @@
-# TaskFlow
+---
+
+# 📑 Group Project Info
+**Render Link**  
+🔗 [TaskFlow GRE Project](https://taskflow-gre-1.onrender.com)  
+**Project Title:** TaskFlow Project  
+
+## Group Members
+- **Section:** BSIS-3A  
+
+### Members:
+1. Amistoso, Claries Ann B.
+2. Bata, Mariz S.
+3. Fetil, Jaennie Cyrell N.
+4. Non, Christian Jeric
+5. Resentes, Shanley R.
+6. Sablayan, Penelope R.
+
+
+### TaskFlow
 
 A full-stack Kanban board application similar to Trello, built with React, Node.js, Express, and MongoDB.
 
-## Features
+### Features
 
 - Create and manage boards
 - Organize tasks into lists and cards
@@ -10,7 +29,7 @@ A full-stack Kanban board application similar to Trello, built with React, Node.
 - User authentication with JWT
 - Real-time updates (planned)
 
-## Installation
+### Installation
 
 1. **Clone the repository:**
    ```bash
@@ -56,7 +75,7 @@ A full-stack Kanban board application similar to Trello, built with React, Node.
    - Open your browser to `http://localhost:5173`
 
 
-## Technologies Used
+### Technologies Used
 
 - **Frontend:** React 19, Vite, Tailwind CSS, Radix UI, @dnd-kit
 - **Backend:** Node.js, Express, MongoDB with Mongoose

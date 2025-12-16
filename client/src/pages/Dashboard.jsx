@@ -28,6 +28,9 @@ const Dashboard = () => {
     const [newBoardTitle, setNewBoardTitle] = useState("");
     const [newBoardBg, setNewBoardBg] = useState("#0079bf");
 
+    // Sorting feature
+    const [sortType, setSortType] = useState("recent");
+
     const colors = [
         "#0079bf",
         "#d29034",
@@ -40,61 +43,55 @@ const Dashboard = () => {
         "#838c91",
     ];
 
-    const fetchBoards = async () => {
-        try {
-            const { data } = await api.get("/boards");
-            setBoards(data);
-            setLoading(false);
-            // Join each board room to receive updates on dashboard
-            data.forEach((b) => joinBoard(b._id));
-        } catch (error) {
-            console.error(error);
-            setLoading(false);
-        }
-    };
-
-    // Fetch boards only on mount
+    // Fetch Boards and Realtime
     useEffect(() => {
-        queueMicrotask(() => {
-            fetchBoards();
-        });
-    }, []);
+        const fetchBoards = async () => {
+            try {
+                const { data } = await api.get("/boards");
+                setBoards(data);
+                setLoading(false);
+                data.forEach((b) => joinBoard(b._id));
+            } catch (error) {
+                console.error(error);
+                setLoading(false);
+            }
+        };
+        fetchBoards();
 
-    // Set up socket listeners, update when boards change
-    useEffect(() => {
         const handleCreated = ({ board }) => {
             setBoards((prev) =>
-                prev.find((b) => b._id === board._id) ? prev : [...prev, board],
+                prev.some((b) => b._id === board._id) ? prev : [...prev, board],
             );
         };
+
         const handleUpdated = ({ board }) => {
             setBoards((prev) =>
                 prev.map((b) => (b._id === board._id ? board : b)),
             );
         };
+
         const handleDeleted = ({ boardId }) => {
             setBoards((prev) => prev.filter((b) => b._id !== boardId));
         };
-        // Targeted events for this user when they are added or removed from a board
+
         const handleDashboardAdded = ({ board }) => {
             setBoards((prev) =>
-                prev.find((b) => b._id === board._id) ? prev : [...prev, board],
+                prev.some((b) => b._id === board._id) ? prev : [...prev, board],
             );
-            // Join the room to receive subsequent updates
             joinBoard(board._id);
         };
+
         const handleDashboardRemoved = ({ boardId }) => {
             setBoards((prev) => prev.filter((b) => b._id !== boardId));
-            // Leave the room to stop updates
             leaveBoard(boardId);
         };
+
         onSocket("board:created", handleCreated);
         onSocket("board:updated", handleUpdated);
         onSocket("board:deleted", handleDeleted);
         onSocket("dashboard:boardAdded", handleDashboardAdded);
         onSocket("dashboard:boardRemoved", handleDashboardRemoved);
 
-        // Cleanup on unmount
         return () => {
             offSocket("board:created", handleCreated);
             offSocket("board:updated", handleUpdated);
@@ -105,6 +102,28 @@ const Dashboard = () => {
         };
     }, [boards]);
 
+    // Sorting Logic
+    const getSortedBoards = () => {
+        let sorted = [...boards];
+
+        if (sortType === "az") {
+            sorted.sort((a, b) => a.title.localeCompare(b.title));
+        } else if (sortType === "za") {
+            sorted.sort((a, b) => b.title.localeCompare(a.title));
+        } else if (sortType === "recent") {
+            sorted.sort(
+                (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
+            );
+        } else if (sortType === "oldest") {
+            sorted.sort(
+                (a, b) => new Date(a.updatedAt) - new Date(b.updatedAt),
+            );
+        }
+
+        return sorted;
+    };
+
+    // Create Board
     const handleCreateBoard = async (e) => {
         e.preventDefault();
         try {
@@ -112,6 +131,7 @@ const Dashboard = () => {
                 title: newBoardTitle,
                 background: newBoardBg,
             });
+
             setBoards([...boards, data]);
             setNewBoardTitle("");
             setNewBoardBg("#0079bf");
@@ -129,6 +149,8 @@ const Dashboard = () => {
         );
     }
 
+    const sortedBoards = getSortedBoards();
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
             {/* Header */}
@@ -143,9 +165,9 @@ const Dashboard = () => {
                                 Welcome, {user?.username}!
                             </span>
                         </div>
+
                         <Button onClick={logout} variant="ghost" size="sm">
-                            <LogOut className="w-4 h-4 mr-2" />
-                            Logout
+                            <LogOut className="w-4 h-4 mr-2" /> Logout
                         </Button>
                     </div>
                 </div>
@@ -154,12 +176,24 @@ const Dashboard = () => {
             {/* Main Content */}
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div className="mb-8">
-                    <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                        Your Boards
-                    </h2>
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl font-semibold text-gray-800">
+                            Your Boards
+                        </h2>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {/* Create New Board Card */}
+                        <select
+                            className="border rounded px-2 py-1"
+                            value={sortType}
+                            onChange={(e) => setSortType(e.target.value)}
+                        >
+                            <option value="az">A–Z</option>
+                            <option value="za">Z–A</option>
+                            <option value="recent">Most Recent</option>
+                            <option value="oldest">Oldest</option>
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
                         <Dialog
                             open={isCreateOpen}
                             onOpenChange={setIsCreateOpen}
@@ -167,23 +201,25 @@ const Dashboard = () => {
                             <DialogTrigger asChild>
                                 <button className="h-32 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all flex items-center justify-center group">
                                     <div className="text-center">
-                                        <Plus className="w-8 h-8 mx-auto text-gray-400 group-hover:text-gray-600 mb-2" />
-                                        <span className="text-sm font-medium text-gray-600 group-hover:text-gray-800">
+                                        <Plus className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+                                        <span className="text-sm font-medium text-gray-600">
                                             Create new board
                                         </span>
                                     </div>
                                 </button>
                             </DialogTrigger>
+
                             <DialogContent>
                                 <DialogHeader>
                                     <DialogTitle>Create New Board</DialogTitle>
                                 </DialogHeader>
+
                                 <form
                                     onSubmit={handleCreateBoard}
                                     className="space-y-4"
                                 >
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Board Title
                                         </label>
                                         <Input
@@ -192,12 +228,12 @@ const Dashboard = () => {
                                             onChange={(e) =>
                                                 setNewBoardTitle(e.target.value)
                                             }
-                                            placeholder="Enter board title..."
                                             required
                                         />
                                     </div>
+
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Background Color
                                         </label>
                                         <div className="grid grid-cols-5 gap-2">
@@ -208,11 +244,7 @@ const Dashboard = () => {
                                                     onClick={() =>
                                                         setNewBoardBg(color)
                                                     }
-                                                    className={`h-12 rounded-md transition-all ${
-                                                        newBoardBg === color
-                                                            ? "ring-2 ring-offset-2 ring-blue-500"
-                                                            : ""
-                                                    }`}
+                                                    className={`h-12 rounded-md ${newBoardBg === color ? "ring-2 ring-blue-500" : ""}`}
                                                     style={{
                                                         backgroundColor: color,
                                                     }}
@@ -220,35 +252,33 @@ const Dashboard = () => {
                                             ))}
                                         </div>
                                     </div>
+
                                     <Button type="submit" className="w-full">
-                                        Create Board
+                                        Create
                                     </Button>
                                 </form>
                             </DialogContent>
                         </Dialog>
 
-                        {/* Board Cards */}
-                        {boards.map((board) => (
-                            <button
+                        {sortedBoards.map((board) => (
+                            <div
                                 key={board._id}
                                 onClick={() => navigate(`/board/${board._id}`)}
-                                className="h-32 rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105 flex items-center justify-center relative overflow-hidden group"
+                                className="relative h-32 rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105 overflow-hidden group cursor-pointer"
                                 style={{ backgroundColor: board.background }}
                             >
-                                <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-10 transition-opacity" />
-                                <h3 className="text-white font-semibold text-lg px-4 text-center relative z-10">
-                                    {board.title}
-                                </h3>
-                            </button>
+                                <div className="absolute inset-0 flex items-center justify-center text-center">
+                                    <h3 className="text-white font-semibold text-lg">
+                                        {board.title}
+                                    </h3>
+                                </div>
+                            </div>
                         ))}
                     </div>
 
                     {boards.length === 0 && (
-                        <div className="text-center py-12">
-                            <p className="text-gray-500">
-                                No boards yet. Create your first board to get
-                                started!
-                            </p>
+                        <div className="text-center py-12 text-gray-500">
+                            No boards yet. Create your first one!
                         </div>
                     )}
                 </div>
